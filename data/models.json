@@ -1,0 +1,35 @@
+[
+  {
+    "id": "bmw-5-series",
+    "name": "BMW 5 Series",
+    "series": "Sedan",
+    "price": 100500,
+    "year": 2026,
+    "range": "Petrol / Hybrid",
+    "horsepower": 335,
+    "heroImage": "/images/bmw-showroom-reference.png",
+    "description": "Executive performance sedan with dynamic handling and premium comfort."
+  },
+  {
+    "id": "bmw-x5",
+    "name": "BMW X5",
+    "series": "SUV",
+    "price": 117900,
+    "year": 2026,
+    "range": "Petrol / Hybrid",
+    "horsepower": 375,
+    "heroImage": "/images/bmw-showroom-reference.png",
+    "description": "Versatile luxury SUV designed for families and high-performance road trips."
+  },
+  {
+    "id": "bmw-i4",
+    "name": "BMW i4",
+    "series": "Electric Gran Coupe",
+    "price": 109990,
+    "year": 2026,
+    "range": "Full Electric",
+    "horsepower": 536,
+    "heroImage": "/images/bmw-showroom-reference.png",
+    "description": "Fully electric gran coupe that combines modern tech with signature BMW dynamics."
+  }
+]

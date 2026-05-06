@@ -22,6 +22,17 @@
     "description": "Versatile luxury SUV designed for families and high-performance road trips."
   },
   {
+    "id": "bmw-x3",
+    "name": "BMW X3 M40i",
+    "series": "SUV",
+    "price": 96200,
+    "year": 2025,
+    "range": "Petrol",
+    "horsepower": 382,
+    "heroImage": "/images/bmw-showroom-reference.png",
+    "description": "Performance-oriented compact SUV with sporty chassis tuning and dynamic handling."
+  },
+  {
     "id": "bmw-i4",
     "name": "BMW i4",
     "series": "Electric Gran Coupe",
@@ -31,5 +42,27 @@
     "horsepower": 536,
     "heroImage": "/images/bmw-showroom-reference.png",
     "description": "Fully electric gran coupe that combines modern tech with signature BMW dynamics."
+  },
+  {
+    "id": "bmw-m3-cs-touring",
+    "name": "BMW M3 CS Touring",
+    "series": "Track Wagon",
+    "price": 186500,
+    "year": 2025,
+    "range": "Petrol",
+    "horsepower": 543,
+    "heroImage": "/images/bmw-showroom-reference.png",
+    "description": "A carbon-focused performance wagon with all-wheel drive traction and daily usable pace."
+  },
+  {
+    "id": "bmw-m4-competition",
+    "name": "BMW M4 Competition",
+    "series": "M Coupe",
+    "price": 174900,
+    "year": 2025,
+    "range": "Petrol",
+    "horsepower": 503,
+    "heroImage": "/images/bmw-showroom-reference.png",
+    "description": "Aggressive competition-spec coupe tuned for high-speed stability and sharp handling."
   }
 ]

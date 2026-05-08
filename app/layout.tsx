@@ -14,7 +14,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="text-slate-100">
         <Navbar />
-        <main className="min-h-[calc(100vh-72px)]">{children}</main>
+        <main className="min-h-[calc(100vh-72px)] overflow-hidden">{children}</main>
       </body>
     </html>
   );

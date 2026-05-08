@@ -67,33 +67,36 @@ export default function Navbar() {
       <div
         className={`fixed inset-0 ${isDrawerOpen ? "pointer-events-auto" : "pointer-events-none"}`}
       >
-        <aside
-          className={`absolute right-0 top-0 z-[3] h-full w-[min(320px,80vw)] border-l border-white/10 bg-gradient-to-b from-[#111b2d] to-[#090f1a] p-5 transition-transform ${isDrawerOpen ? "translate-x-0" : "translate-x-full"}`}
-          aria-label="Mobile Navigation Drawer"
-        >
-          <div className="mb-4 flex items-center justify-between">
-            <span>Navigation</span>
-            <button
-              type="button"
-              className="rounded-md border border-white/20 px-2.5 py-1.5 text-sm text-slate-100"
-              onClick={() => setIsDrawerOpen(false)}
-            >
-              Close
-            </button>
-          </div>
-          <div className="flex flex-col gap-2.5">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`${navLinkBase} ${pathname === item.href ? activeNavLink : ""}`}
+        {isDrawerOpen && (
+          <aside
+            className="absolute right-0 top-0 z-[3] h-full w-[min(320px,80vw)] border-l border-white/10 bg-gradient-to-b from-[#111b2d] to-[#090f1a] p-5 transition-transform translate-x-0"
+            aria-label="Mobile Navigation Drawer"
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <span>Navigation</span>
+              <button
+                type="button"
+                className="rounded-md border border-white/20 px-2.5 py-1.5 text-sm text-slate-100"
                 onClick={() => setIsDrawerOpen(false)}
               >
-                {item.label}
-              </Link>
-            ))}
-          </div>
-        </aside>
+                Close
+              </button>
+            </div>
+            <div className="flex flex-col gap-2.5">
+              {navItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`${navLinkBase} ${pathname === item.href ? activeNavLink : ""}`}
+                  onClick={() => setIsDrawerOpen(false)}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </aside>
+        )}
+
         <button
           type="button"
           aria-label="Close menu overlay"

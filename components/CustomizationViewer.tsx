@@ -454,7 +454,7 @@ export default function CustomizationViewer({
           interiorColorRef.current,
         );
         applyWheelCustomization(group, wheelColorRef.current, wheelStyleRef.current);
-        applyDoorState(group, doorsOpenRef.current);
+        applyDoorState(group, doorsOpenRef.current, exteriorColorRef.current);
         applyWindowState(group, windowsDownRef.current);
 
         /**
@@ -503,6 +503,7 @@ export default function CustomizationViewer({
     if (!modelRef.current) return;
 
     applyColorsToScene(modelRef.current, exteriorColor, interiorColor);
+    applyDoorState(modelRef.current, doorsOpenRef.current, exteriorColor);
 
     if (interiorColor && previousInteriorColorRef.current !== interiorColor) {
       focusCameraOnInterior(modelRef.current, cameraRef.current, controlsRef.current);
@@ -536,7 +537,7 @@ export default function CustomizationViewer({
   useEffect(() => {
     if (!modelRef.current) return;
 
-    applyDoorState(modelRef.current, doorsOpen);
+    applyDoorState(modelRef.current, doorsOpen, exteriorColorRef.current);
 
     if (doorsOpen) {
       focusCameraOnDoors(modelRef.current, cameraRef.current, controlsRef.current);
@@ -1551,8 +1552,13 @@ function findWheelAnchors(group: THREE.Group): WheelAnchor[] {
   return anchors.slice(0, 4);
 }
 
-function applyDoorState(group: THREE.Group, open: boolean) {
+function applyDoorState(
+  group: THREE.Group,
+  open: boolean,
+  exteriorColor = "#1f2937",
+) {
   removeCustomChildren(group, "__custom_door_proxy");
+  let rotatedOriginalDoor = false;
 
   group.traverse((obj) => {
     if (isCustomizationHelper(obj)) return;
@@ -1570,14 +1576,111 @@ function applyDoorState(group: THREE.Group, open: boolean) {
     if (!open) return;
 
     /**
-     * Do not add fake blue door panels. Only rotate original door objects when
-     * their pivot is inside/near the door bounds; otherwise leave the GLB clean
-     * because a bad pivot swings body panels through the car.
+     * Rotate original door objects only when their authored pivot is usable.
+     * If the GLB has no separate door nodes, or its door pivot is at the car
+     * origin, fall back to a matching simulated open door instead of doing
+     * nothing.
      */
     if (!hasUsableDoorPivot(obj)) return;
 
     const opensRight = name.includes("right") || name.includes("passenger");
-    obj.rotation.y += opensRight ? -0.62 : 0.62;
+    obj.rotation.y += opensRight ? -0.72 : 0.72;
+    rotatedOriginalDoor = true;
+  });
+
+  if (open && !rotatedOriginalDoor) {
+    addSimulatedOpenDoors(group, exteriorColor);
+  }
+}
+
+function addSimulatedOpenDoors(group: THREE.Group, exteriorColor: string) {
+  const metrics = getCarMetrics(group);
+  const scale = getUniformWorldScale(group);
+  const length = Math.abs(metrics.lengthMax - metrics.lengthMin);
+  const width = Math.abs(metrics.widthMax - metrics.widthMin);
+  const doorLength = Math.max(length * 0.28, 1.0) / scale;
+  const doorHeight = Math.max(metrics.size.y * 0.42, 0.72) / scale;
+  const doorThickness = Math.max(width * 0.018, 0.035) / scale;
+  const doorY = metrics.box.min.y + metrics.size.y * 0.43;
+  const doorLengthCenter = metrics.lengthMin + length * 0.48;
+  const sideInset = width * 0.035;
+  const openAngle = 1.12;
+  const baseRotation = metrics.lengthAxis === "z" ? Math.PI / 2 : 0;
+
+  [metrics.widthMin, metrics.widthMax].forEach((sideWidth) => {
+    const sideDirection = sideWidth === metrics.widthMax ? 1 : -1;
+    const doorGroup = new THREE.Group();
+    doorGroup.name = "__custom_door_proxy";
+    doorGroup.userData.__customizationHelper = true;
+
+    const worldPosition = new THREE.Vector3(
+      metrics.center.x,
+      doorY,
+      metrics.center.z,
+    );
+    setAxisValue(worldPosition, metrics.lengthAxis, doorLengthCenter);
+    setAxisValue(
+      worldPosition,
+      metrics.widthAxis,
+      sideWidth + sideDirection * sideInset,
+    );
+    doorGroup.position.copy(group.worldToLocal(worldPosition));
+    doorGroup.rotation.y = baseRotation - sideDirection * openAngle;
+
+    const exteriorPanel = new THREE.Mesh(
+      new THREE.BoxGeometry(doorLength, doorHeight, doorThickness),
+      new THREE.MeshStandardMaterial({
+        color: exteriorColor,
+        metalness: 0.62,
+        roughness: 0.3,
+      }),
+    );
+    exteriorPanel.name = "__custom_door_proxy_panel";
+    exteriorPanel.userData.__customizationHelper = true;
+    exteriorPanel.position.x = doorLength * 0.5;
+    doorGroup.add(exteriorPanel);
+
+    const interiorPanel = new THREE.Mesh(
+      new THREE.BoxGeometry(doorLength * 0.94, doorHeight * 0.86, doorThickness * 1.08),
+      new THREE.MeshStandardMaterial({
+        color: "#0b0f16",
+        metalness: 0.18,
+        roughness: 0.78,
+      }),
+    );
+    interiorPanel.name = "__custom_door_proxy_inner";
+    interiorPanel.userData.__customizationHelper = true;
+    interiorPanel.position.set(doorLength * 0.52, 0, sideDirection * doorThickness * 0.72);
+    doorGroup.add(interiorPanel);
+
+    const trim = new THREE.Mesh(
+      new THREE.BoxGeometry(doorLength * 1.03, doorHeight * 1.03, doorThickness * 0.32),
+      new THREE.MeshBasicMaterial({
+        color: "#dce7f3",
+        wireframe: true,
+      }),
+    );
+    trim.name = "__custom_door_proxy_trim";
+    trim.userData.__customizationHelper = true;
+    trim.position.x = doorLength * 0.5;
+    trim.scale.set(1, 1, 1);
+    doorGroup.add(trim);
+    trim.renderOrder = -1;
+
+    const hinge = new THREE.Mesh(
+      new THREE.CylinderGeometry(doorThickness * 1.4, doorThickness * 1.4, doorHeight * 0.96, 18),
+      new THREE.MeshStandardMaterial({
+        color: "#c9d4df",
+        metalness: 0.85,
+        roughness: 0.2,
+      }),
+    );
+    hinge.name = "__custom_door_proxy_hinge";
+    hinge.userData.__customizationHelper = true;
+    hinge.rotation.z = Math.PI / 2;
+    doorGroup.add(hinge);
+
+    group.add(doorGroup);
   });
 }
 

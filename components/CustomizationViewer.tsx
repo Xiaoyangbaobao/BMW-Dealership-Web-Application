@@ -112,6 +112,7 @@ export default function CustomizationViewer({
   const lightsOnRef = useRef(lightsOn);
   const previousInteriorColorRef = useRef<string | undefined>(interiorColor);
   const previousWheelColorRef = useRef<string | undefined>(wheelColor);
+  const previousWheelStyleRef = useRef<WheelStyle>(wheelStyle);
 
   useEffect(() => {
     exteriorColorRef.current = exteriorColor;
@@ -447,11 +448,15 @@ export default function CustomizationViewer({
 
     applyWheelCustomization(modelRef.current, wheelColor, wheelStyle);
 
-    if (wheelColor && previousWheelColorRef.current !== wheelColor) {
+    if (
+      (wheelColor && previousWheelColorRef.current !== wheelColor) ||
+      previousWheelStyleRef.current !== wheelStyle
+    ) {
       focusCameraOnWheels(modelRef.current, cameraRef.current, controlsRef.current);
     }
 
     previousWheelColorRef.current = wheelColor;
+    previousWheelStyleRef.current = wheelStyle;
   }, [wheelColor, wheelStyle]);
 
   useEffect(() => {
@@ -522,7 +527,7 @@ function fitCameraToObject(
 ) {
   object.updateMatrixWorld(true);
 
-  const box = new THREE.Box3().setFromObject(object);
+  const box = getCleanWorldBox(object);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
 
@@ -1075,10 +1080,15 @@ type CarMetrics = {
   widthMax: number;
 };
 
+type WheelAnchor = {
+  center: THREE.Vector3;
+  radius: number;
+};
+
 function getCarMetrics(group: THREE.Group): CarMetrics {
   group.updateMatrixWorld(true);
 
-  const box = new THREE.Box3().setFromObject(group);
+  const box = getCleanWorldBox(group);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
   const lengthAxis: "x" | "z" = size.x >= size.z ? "x" : "z";
@@ -1097,6 +1107,32 @@ function getCarMetrics(group: THREE.Group): CarMetrics {
   };
 }
 
+function getCleanWorldBox(root: THREE.Object3D) {
+  const box = new THREE.Box3();
+
+  root.updateMatrixWorld(true);
+  root.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    if (isCustomizationHelper(obj)) return;
+
+    obj.updateWorldMatrix(true, false);
+    const meshBox = new THREE.Box3().setFromObject(obj);
+    if (!meshBox.isEmpty()) {
+      box.union(meshBox);
+    }
+  });
+
+  if (box.isEmpty()) {
+    return new THREE.Box3().setFromObject(root);
+  }
+
+  return box;
+}
+
+function isCustomizationHelper(obj: THREE.Object3D) {
+  return obj.name.startsWith("__custom_") || Boolean(obj.userData?.__customizationHelper);
+}
+
 function moveCameraTo(
   camera: THREE.PerspectiveCamera | null,
   controls: OrbitControls | null,
@@ -1109,13 +1145,13 @@ function moveCameraTo(
   camera.position.copy(position);
   camera.lookAt(target);
   camera.near = 0.01;
-  camera.far = Math.max(position.distanceTo(target) * 10, 100);
+  camera.far = Math.max(position.distanceTo(target) * 12, 100);
   camera.updateProjectionMatrix();
 
   if (controls) {
     controls.target.copy(target);
     controls.minDistance = minDistance;
-    controls.maxDistance = Math.max(position.distanceTo(target) * 2.5, 6);
+    controls.maxDistance = Math.max(position.distanceTo(target) * 3, 6);
     controls.update();
   }
 }
@@ -1125,22 +1161,23 @@ function focusCameraOnWheels(
   camera: THREE.PerspectiveCamera | null,
   controls: OrbitControls | null,
 ) {
+  const anchors = findWheelAnchors(group);
   const metrics = getCarMetrics(group);
   const length = Math.abs(metrics.lengthMax - metrics.lengthMin);
   const width = Math.abs(metrics.widthMax - metrics.widthMin);
-  const frontLength = metrics.lengthMin + length * 0.68;
-  const sideWidth = metrics.widthMax;
-  const target = new THREE.Vector3(metrics.center.x, metrics.box.min.y + metrics.size.y * 0.24, metrics.center.z);
+  const target = anchors[0]?.center.clone() ?? new THREE.Vector3(metrics.center.x, metrics.box.min.y + metrics.size.y * 0.22, metrics.center.z);
 
-  setAxisValue(target, metrics.lengthAxis, frontLength);
-  setAxisValue(target, metrics.widthAxis, sideWidth);
+  if (!anchors[0]) {
+    setAxisValue(target, metrics.lengthAxis, metrics.lengthMin + length * 0.72);
+    setAxisValue(target, metrics.widthAxis, metrics.widthMax);
+  }
 
   const position = target.clone();
-  setAxisValue(position, metrics.lengthAxis, frontLength + length * 0.08);
-  setAxisValue(position, metrics.widthAxis, sideWidth + width * 1.15);
-  position.y += metrics.size.y * 0.1;
+  setAxisValue(position, metrics.lengthAxis, getAxisValue(target, metrics.lengthAxis) + length * 0.1);
+  setAxisValue(position, metrics.widthAxis, getAxisValue(target, metrics.widthAxis) + width * 0.62);
+  position.y += metrics.size.y * 0.08;
 
-  moveCameraTo(camera, controls, position, target, 0.6);
+  moveCameraTo(camera, controls, position, target, 0.18);
 }
 
 function focusCameraOnInterior(
@@ -1173,10 +1210,10 @@ function focusCameraOnDoors(
   setAxisValue(target, metrics.widthAxis, metrics.widthMax);
 
   const position = target.clone();
-  setAxisValue(position, metrics.widthAxis, metrics.widthMax + width * 1.35);
-  position.y += metrics.size.y * 0.15;
+  setAxisValue(position, metrics.widthAxis, metrics.widthMax + width * 0.92);
+  position.y += metrics.size.y * 0.12;
 
-  moveCameraTo(camera, controls, position, target, 0.8);
+  moveCameraTo(camera, controls, position, target, 0.5);
 }
 
 function focusCameraOnLights(
@@ -1194,11 +1231,11 @@ function focusCameraOnLights(
   setAxisValue(
     position,
     metrics.lengthAxis,
-    front + (FRONT_SIGN === 1 ? length * 0.85 : -length * 0.85),
+    front + (FRONT_SIGN === 1 ? length * 0.62 : -length * 0.62),
   );
-  position.y += metrics.size.y * 0.1;
+  position.y += metrics.size.y * 0.08;
 
-  moveCameraTo(camera, controls, position, target, 0.7);
+  moveCameraTo(camera, controls, position, target, 0.45);
 }
 
 function applyWheelCustomization(
@@ -1209,15 +1246,8 @@ function applyWheelCustomization(
   group.traverse((obj) => {
     if (!(obj instanceof THREE.Mesh)) return;
 
-    const name = `${obj.name || ""} ${getMaterialNames(obj)}`.toLowerCase();
-    const isWheel =
-      name.includes("wheel") ||
-      name.includes("rim") ||
-      name.includes("alloy") ||
-      name.includes("tyre") ||
-      name.includes("tire");
-
-    if (!isWheel) return;
+    const name = getObjectSearchName(obj);
+    if (!isWheelLikeName(name)) return;
 
     getMaterials(obj).forEach((material) => {
       const mat = material as any;
@@ -1241,46 +1271,95 @@ function applyWheelCustomization(
 }
 
 function addSimulatedWheelSet(group: THREE.Group, color: string, style: WheelStyle) {
+  const anchors = findWheelAnchors(group);
   const metrics = getCarMetrics(group);
+  const scale = getUniformWorldScale(group);
+  const fallbackRadius = Math.max(Math.min(metrics.size.y * 0.13, metrics.size.x * 0.035, metrics.size.z * 0.065), 0.18);
+  const wheelAnchors = anchors.length > 0 ? anchors : getFallbackWheelAnchors(metrics, fallbackRadius);
+
+  wheelAnchors.forEach((anchor) => {
+    const localCenter = group.worldToLocal(anchor.center.clone());
+    const localRadius = Math.max(anchor.radius / scale, 0.08);
+    const wheel = new THREE.Group();
+    wheel.name = "__custom_wheel_proxy";
+    wheel.userData.__customizationHelper = true;
+
+    const rim = new THREE.Mesh(
+      new THREE.TorusGeometry(localRadius * 0.66, localRadius * 0.045, 14, 72),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.24, metalness: 0.92 }),
+    );
+    const hub = new THREE.Mesh(
+      new THREE.CylinderGeometry(localRadius * 0.16, localRadius * 0.2, localRadius * 0.06, 32),
+      new THREE.MeshStandardMaterial({ color: "#f4f7fb", roughness: 0.2, metalness: 0.95 }),
+    );
+
+    orientWheelPart(rim, metrics.widthAxis);
+    orientWheelPart(hub, metrics.widthAxis);
+    wheel.add(rim, hub);
+    addWheelSpokes(wheel, localRadius, color, style, metrics.widthAxis);
+    wheel.position.copy(localCenter);
+    group.add(wheel);
+  });
+}
+
+function findWheelAnchors(group: THREE.Group): WheelAnchor[] {
+  const metrics = getCarMetrics(group);
+  const maxModelAxis = Math.max(metrics.size.x, metrics.size.y, metrics.size.z, 1);
+  const anchors: WheelAnchor[] = [];
+
+  group.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+    if (isCustomizationHelper(obj)) return;
+
+    const name = getObjectSearchName(obj);
+    if (!isWheelLikeName(name)) return;
+
+    obj.updateWorldMatrix(true, false);
+    const box = new THREE.Box3().setFromObject(obj);
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const minDim = Math.min(size.x, size.y, size.z);
+
+    if (!Number.isFinite(maxDim) || maxDim <= 0 || maxDim > maxModelAxis * 0.45 || minDim <= 0) {
+      return;
+    }
+
+    const center = box.getCenter(new THREE.Vector3());
+    const radius = Math.max(size.y, Math.min(size.x, size.z)) * 0.5;
+    const duplicate = anchors.some((anchor) => anchor.center.distanceTo(center) < maxModelAxis * 0.045);
+
+    if (!duplicate) {
+      anchors.push({ center, radius: Math.max(radius, maxModelAxis * 0.025) });
+    }
+  });
+
+  anchors.sort((a, b) => {
+    const aSide = getAxisValue(a.center, metrics.widthAxis);
+    const bSide = getAxisValue(b.center, metrics.widthAxis);
+    const sideSort = bSide - aSide;
+    if (Math.abs(sideSort) > 0.01) return sideSort;
+    return getAxisValue(b.center, metrics.lengthAxis) - getAxisValue(a.center, metrics.lengthAxis);
+  });
+
+  return anchors.slice(0, 4);
+}
+
+function getFallbackWheelAnchors(metrics: CarMetrics, radius: number): WheelAnchor[] {
   const length = Math.abs(metrics.lengthMax - metrics.lengthMin);
   const width = Math.abs(metrics.widthMax - metrics.widthMin);
-  const radius = Math.max(Math.min(metrics.size.y * 0.18, length * 0.075), 0.32);
-  const tube = radius * 0.08;
-  const y = metrics.box.min.y + radius * 1.08;
-  const lengthPositions = [metrics.lengthMin + length * 0.26, metrics.lengthMin + length * 0.74];
-  const widthPositions = [metrics.widthMin - width * 0.012, metrics.widthMax + width * 0.012];
+  const y = metrics.box.min.y + radius;
+  const anchors: WheelAnchor[] = [];
 
-  lengthPositions.forEach((lengthPos) => {
-    widthPositions.forEach((widthPos) => {
-      const wheel = new THREE.Group();
-      wheel.name = "__custom_wheel_proxy";
-
-      const tire = new THREE.Mesh(
-        new THREE.TorusGeometry(radius, radius * 0.18, 18, 72),
-        new THREE.MeshStandardMaterial({ color: "#050609", roughness: 0.62, metalness: 0.18 }),
-      );
-      const rim = new THREE.Mesh(
-        new THREE.TorusGeometry(radius * 0.58, tube, 14, 64),
-        new THREE.MeshStandardMaterial({ color, roughness: 0.28, metalness: 0.86 }),
-      );
-      const hub = new THREE.Mesh(
-        new THREE.CylinderGeometry(radius * 0.18, radius * 0.22, radius * 0.1, 32),
-        new THREE.MeshStandardMaterial({ color, roughness: 0.22, metalness: 0.9 }),
-      );
-
-      orientWheelPart(tire, metrics.widthAxis);
-      orientWheelPart(rim, metrics.widthAxis);
-      orientWheelPart(hub, metrics.widthAxis);
-
-      wheel.add(tire, rim, hub);
-      addWheelSpokes(wheel, radius, color, style, metrics.widthAxis);
-
-      wheel.position.set(metrics.center.x, y, metrics.center.z);
-      setAxisValue(wheel.position, metrics.lengthAxis, lengthPos);
-      setAxisValue(wheel.position, metrics.widthAxis, widthPos);
-      group.add(wheel);
+  [metrics.lengthMin + length * 0.27, metrics.lengthMin + length * 0.73].forEach((lengthPos) => {
+    [metrics.widthMin + width * 0.08, metrics.widthMax - width * 0.08].forEach((widthPos) => {
+      const center = new THREE.Vector3(metrics.center.x, y, metrics.center.z);
+      setAxisValue(center, metrics.lengthAxis, lengthPos);
+      setAxisValue(center, metrics.widthAxis, widthPos);
+      anchors.push({ center, radius });
     });
   });
+
+  return anchors;
 }
 
 function addWheelSpokes(
@@ -1292,8 +1371,8 @@ function addWheelSpokes(
 ) {
   if (style === "aero") {
     const disc = new THREE.Mesh(
-      new THREE.CylinderGeometry(radius * 0.48, radius * 0.52, radius * 0.055, 48),
-      new THREE.MeshStandardMaterial({ color, roughness: 0.34, metalness: 0.82 }),
+      new THREE.CylinderGeometry(radius * 0.5, radius * 0.54, radius * 0.035, 56),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.32, metalness: 0.86 }),
     );
     orientWheelPart(disc, widthAxis);
     wheel.add(disc);
@@ -1305,8 +1384,8 @@ function addWheelSpokes(
 
   for (let index = 0; index < count; index += 1) {
     const spoke = new THREE.Mesh(
-      new THREE.BoxGeometry(spokeWidth, radius * 0.82, radius * 0.045),
-      new THREE.MeshStandardMaterial({ color, roughness: 0.26, metalness: 0.9 }),
+      new THREE.BoxGeometry(spokeWidth, radius * 0.84, radius * 0.035),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.24, metalness: 0.94 }),
     );
 
     spoke.rotation.z = (Math.PI * 2 * index) / count;
@@ -1330,7 +1409,7 @@ function applyDoorState(group: THREE.Group, open: boolean) {
   group.traverse((obj) => {
     if (!(obj instanceof THREE.Mesh)) return;
 
-    const name = `${obj.name || ""} ${getMaterialNames(obj)}`.toLowerCase();
+    const name = getObjectSearchName(obj);
     if (!name.includes("door")) return;
 
     if (!obj.userData.__customOriginalRotation) {
@@ -1351,17 +1430,18 @@ function applyDoorState(group: THREE.Group, open: boolean) {
 
 function addSimulatedOpenDoors(group: THREE.Group) {
   const metrics = getCarMetrics(group);
+  const scale = getUniformWorldScale(group);
   const length = Math.abs(metrics.lengthMax - metrics.lengthMin);
   const width = Math.abs(metrics.widthMax - metrics.widthMin);
-  const doorLength = length * 0.28;
-  const doorHeight = metrics.size.y * 0.38;
+  const doorLength = (length * 0.28) / scale;
+  const doorHeight = (metrics.size.y * 0.38) / scale;
   const doorY = metrics.box.min.y + metrics.size.y * 0.43;
   const doorCenterLength = metrics.lengthMin + length * 0.48;
 
   [metrics.widthMin, metrics.widthMax].forEach((sideWidth, index) => {
     const direction = index === 0 ? -1 : 1;
     const door = new THREE.Mesh(
-      new THREE.BoxGeometry(doorLength, doorHeight, 0.05),
+      new THREE.BoxGeometry(doorLength, doorHeight, 0.035 / scale),
       new THREE.MeshStandardMaterial({
         color: "#10233f",
         metalness: 0.72,
@@ -1372,9 +1452,12 @@ function addSimulatedOpenDoors(group: THREE.Group) {
     );
 
     door.name = "__custom_door_proxy";
-    door.position.set(metrics.center.x, doorY, metrics.center.z);
-    setAxisValue(door.position, metrics.lengthAxis, doorCenterLength + length * 0.08 * direction);
-    setAxisValue(door.position, metrics.widthAxis, sideWidth + width * 0.22 * direction);
+    door.userData.__customizationHelper = true;
+
+    const worldPosition = new THREE.Vector3(metrics.center.x, doorY, metrics.center.z);
+    setAxisValue(worldPosition, metrics.lengthAxis, doorCenterLength + length * 0.08 * direction);
+    setAxisValue(worldPosition, metrics.widthAxis, sideWidth + width * 0.18 * direction);
+    door.position.copy(group.worldToLocal(worldPosition));
 
     if (metrics.widthAxis === "x") {
       door.rotation.y = Math.PI / 2 + direction * 0.72;
@@ -1390,7 +1473,7 @@ function applyWindowState(group: THREE.Group, down: boolean) {
   group.traverse((obj) => {
     if (!(obj instanceof THREE.Mesh)) return;
 
-    const name = `${obj.name || ""} ${getMaterialNames(obj)}`.toLowerCase();
+    const name = getObjectSearchName(obj);
     const isGlass =
       name.includes("window") ||
       name.includes("glass") ||
@@ -1418,7 +1501,7 @@ function applyWindowState(group: THREE.Group, down: boolean) {
         }
 
         mat.transparent = true;
-        mat.opacity = down ? 0.16 : (mat.userData?.__customOriginalOpacity ?? mat.opacity);
+        mat.opacity = down ? 0.08 : (mat.userData?.__customOriginalOpacity ?? mat.opacity);
         mat.depthWrite = !down;
       }
 
@@ -1432,32 +1515,78 @@ function applySimulatedHeadlights(group: THREE.Group, on: boolean) {
   if (!on) return;
 
   const metrics = getCarMetrics(group);
+  const scale = getUniformWorldScale(group);
   const length = Math.abs(metrics.lengthMax - metrics.lengthMin);
   const width = Math.abs(metrics.widthMax - metrics.widthMin);
   const front = FRONT_SIGN === 1 ? metrics.lengthMax : metrics.lengthMin;
   const lightY = metrics.box.min.y + metrics.size.y * 0.43;
-  const lightWidths = [metrics.widthMin + width * 0.28, metrics.widthMax - width * 0.28];
+  const lightWidths = [metrics.widthMin + width * 0.3, metrics.widthMax - width * 0.3];
+  const direction = FRONT_SIGN === 1 ? 1 : -1;
 
   lightWidths.forEach((widthPos) => {
+    const worldBulb = new THREE.Vector3(metrics.center.x, lightY, metrics.center.z);
+    setAxisValue(worldBulb, metrics.lengthAxis, front + direction * length * 0.012);
+    setAxisValue(worldBulb, metrics.widthAxis, widthPos);
+
+    const bulbRadius = Math.max(width * 0.055, metrics.size.y * 0.035) / scale;
     const bulb = new THREE.Mesh(
-      new THREE.SphereGeometry(Math.max(width * 0.035, 0.08), 24, 12),
-      new THREE.MeshBasicMaterial({ color: "#f4f8ff", transparent: true, opacity: 0.92 }),
+      new THREE.SphereGeometry(bulbRadius, 32, 16),
+      new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 1, toneMapped: false }),
     );
     bulb.name = "__custom_headlight_proxy";
-    bulb.position.set(metrics.center.x, lightY, metrics.center.z);
-    setAxisValue(bulb.position, metrics.lengthAxis, front + (FRONT_SIGN === 1 ? 0.03 : -0.03));
-    setAxisValue(bulb.position, metrics.widthAxis, widthPos);
+    bulb.userData.__customizationHelper = true;
+    bulb.position.copy(group.worldToLocal(worldBulb.clone()));
     group.add(bulb);
 
-    const beam = new THREE.SpotLight("#dff1ff", 9, length * 1.8, Math.PI / 8, 0.58, 1.2);
+    const glow = new THREE.Mesh(
+      new THREE.SphereGeometry(bulbRadius * 2.8, 32, 16),
+      new THREE.MeshBasicMaterial({
+        color: "#9ed8ff",
+        transparent: true,
+        opacity: 0.32,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    );
+    glow.name = "__custom_headlight_proxy";
+    glow.userData.__customizationHelper = true;
+    glow.position.copy(bulb.position);
+    group.add(glow);
+
+    const beamLength = (length * 0.52) / scale;
+    const beam = new THREE.Mesh(
+      new THREE.ConeGeometry(Math.max(width * 0.16, 0.18) / scale, beamLength, 36, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: "#8fd3ff",
+        transparent: true,
+        opacity: 0.18,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+      }),
+    );
     beam.name = "__custom_headlight_proxy";
-    beam.position.copy(bulb.position);
+    beam.userData.__customizationHelper = true;
+    beam.position.copy(group.worldToLocal(worldBulb.clone()));
+    setAxisValue(beam.position, metrics.lengthAxis, getAxisValue(beam.position, metrics.lengthAxis) + direction * beamLength * 0.5);
+    beam.rotation.x = metrics.lengthAxis === "z" ? Math.PI / 2 : 0;
+    beam.rotation.z = metrics.lengthAxis === "x" ? -direction * Math.PI / 2 : 0;
+    group.add(beam);
+
+    const spot = new THREE.SpotLight("#dff4ff", 55, length * 2.2, Math.PI / 7, 0.45, 0.9);
+    spot.name = "__custom_headlight_proxy";
+    spot.userData.__customizationHelper = true;
+    spot.position.copy(bulb.position);
     const target = new THREE.Object3D();
     target.name = "__custom_headlight_proxy";
-    target.position.copy(bulb.position);
-    setAxisValue(target.position, metrics.lengthAxis, front + (FRONT_SIGN === 1 ? length : -length));
-    group.add(beam, target);
-    beam.target = target;
+    target.userData.__customizationHelper = true;
+    const worldTarget = worldBulb.clone();
+    setAxisValue(worldTarget, metrics.lengthAxis, front + direction * length * 0.9);
+    target.position.copy(group.worldToLocal(worldTarget));
+    group.add(spot, target);
+    spot.target = target;
   });
 }
 
@@ -1471,7 +1600,10 @@ function setEmbeddedLightVisibility(group: THREE.Group, visible: boolean) {
       getMaterials(obj).forEach((material) => {
         const mat = material as any;
         if (mat.emissiveIntensity !== undefined) {
-          mat.emissiveIntensity = visible ? 1.8 : 0.15;
+          mat.emissiveIntensity = visible ? 4.5 : 0.05;
+        }
+        if (mat.emissive && visible) {
+          mat.emissive.set("#ffffff");
         }
         mat.needsUpdate = true;
       });
@@ -1494,6 +1626,27 @@ function removeCustomChildren(parent: THREE.Object3D, name: string) {
     child.parent?.remove(child);
     disposeObject3D(child);
   });
+}
+
+function getObjectSearchName(obj: THREE.Mesh) {
+  return `${obj.name || ""} ${getMaterialNames(obj)}`.toLowerCase();
+}
+
+function isWheelLikeName(name: string) {
+  return (
+    name.includes("wheel") ||
+    name.includes("rim") ||
+    name.includes("rims") ||
+    name.includes("alloy") ||
+    name.includes("tyre") ||
+    name.includes("tire") ||
+    name.includes("tnrrims")
+  );
+}
+
+function getUniformWorldScale(object: THREE.Object3D) {
+  const scale = object.getWorldScale(new THREE.Vector3());
+  return Math.max(scale.x, scale.y, scale.z, 0.0001);
 }
 
 function getMaterials(mesh: THREE.Mesh) {

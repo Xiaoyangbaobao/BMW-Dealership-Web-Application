@@ -25,6 +25,8 @@ const colorOptions: Record<string, string> = {
   "Portimao Blue": "#0B67D0",
   "Frozen Grey": "#9BA3A8",
   "Racing Red": "#B00020",
+  "Sunset Orange": "#F97316",
+  "M Isle Green": "#00A884",
 };
 
 const interiors: Record<string, string> = {

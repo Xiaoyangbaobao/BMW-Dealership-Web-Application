@@ -47,7 +47,8 @@ const CAMERA_PADDING = 0.46;
  * 车在画面里的填充比例。
  * 数值越大，车越撑满画布。
  */
-const CAMERA_FILL_RATIO = 1.18;
+const CAMERA_FILL_RATIO = 0.78;
+const KEYBOARD_TRANSLATE_STEP = 0.22;
 
 const FLOOR_TOP_Y = -0.42;
 const MODEL_FLOOR_GAP = 0.02;
@@ -280,6 +281,18 @@ export default function CustomizationViewer({
       } else if (event.key === "-" || event.key === "_") {
         event.preventDefault();
         zoomCameraWithKeyboard(camera, controls, 1.18);
+      } else if (event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        translateModelWithKeyboard(modelRef.current, -KEYBOARD_TRANSLATE_STEP, 0);
+      } else if (event.key.toLowerCase() === "d") {
+        event.preventDefault();
+        translateModelWithKeyboard(modelRef.current, KEYBOARD_TRANSLATE_STEP, 0);
+      } else if (event.key.toLowerCase() === "w") {
+        event.preventDefault();
+        translateModelWithKeyboard(modelRef.current, 0, KEYBOARD_TRANSLATE_STEP);
+      } else if (event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        translateModelWithKeyboard(modelRef.current, 0, -KEYBOARD_TRANSLATE_STEP);
       }
     };
 
@@ -526,7 +539,7 @@ export default function CustomizationViewer({
         ref={hostRef}
         className="h-full w-full cursor-grab active:cursor-grabbing"
         tabIndex={0}
-        aria-label="3D vehicle viewport. Drag left or right to rotate, use arrow keys to orbit, and use plus or minus to zoom."
+        aria-label="3D vehicle viewport. Drag left or right to rotate, use arrow keys to orbit, use plus or minus to zoom, and use W A S D to move the vehicle."
       />
 
       {!resolvedPath && (
@@ -551,7 +564,7 @@ export default function CustomizationViewer({
       )}
 
       <div className="pointer-events-none absolute bottom-4 left-4 rounded-md border border-white/15 bg-black/60 px-4 py-2 text-sm text-white shadow-lg backdrop-blur">
-        3D viewport — customize paint, wheels, cabin, doors, windows, and lights
+        3D viewport — arrows orbit, +/- zoom, W/A/S/D move the vehicle
       </div>
     </div>
   );
@@ -567,6 +580,18 @@ function isEditableKeyboardTarget(target: EventTarget | null) {
     tagName === "select" ||
     target.isContentEditable
   );
+}
+
+function translateModelWithKeyboard(
+  model: THREE.Group | null,
+  deltaX: number,
+  deltaY: number,
+) {
+  if (!model) return;
+
+  model.position.x += deltaX;
+  model.position.y += deltaY;
+  model.updateMatrixWorld(true);
 }
 
 function orbitCameraWithKeyboard(

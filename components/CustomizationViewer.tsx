@@ -101,6 +101,7 @@ export default function CustomizationViewer({
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const modelRef = useRef<THREE.Group | null>(null);
+  const stageRef = useRef<THREE.Group | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -204,6 +205,11 @@ export default function CustomizationViewer({
     rimLight.position.set(5.5, 5.2, -5.8);
     scene.add(rimLight);
 
+    const stageGroup = new THREE.Group();
+    stageGroup.name = "__customization_stage";
+    stageRef.current = stageGroup;
+    scene.add(stageGroup);
+
     const floor = new THREE.Mesh(
       new THREE.CylinderGeometry(6.8, 7.2, 0.32, 160),
       new THREE.MeshStandardMaterial({
@@ -213,7 +219,7 @@ export default function CustomizationViewer({
       }),
     );
     floor.position.y = -0.56;
-    scene.add(floor);
+    stageGroup.add(floor);
 
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(6.95, 0.04, 12, 192),
@@ -223,7 +229,7 @@ export default function CustomizationViewer({
     );
     ring.rotation.x = Math.PI / 2;
     ring.position.y = -0.4;
-    scene.add(ring);
+    stageGroup.add(ring);
 
     const innerRing = new THREE.Mesh(
       new THREE.TorusGeometry(4.9, 0.02, 8, 160),
@@ -235,7 +241,7 @@ export default function CustomizationViewer({
     );
     innerRing.rotation.x = Math.PI / 2;
     innerRing.position.y = -0.37;
-    scene.add(innerRing);
+    stageGroup.add(innerRing);
 
     let rafId: number | null = null;
 
@@ -283,16 +289,16 @@ export default function CustomizationViewer({
         zoomCameraWithKeyboard(camera, controls, 1.18);
       } else if (event.key.toLowerCase() === "a") {
         event.preventDefault();
-        translateModelWithKeyboard(modelRef.current, -KEYBOARD_TRANSLATE_STEP, 0);
+        translateModelWithKeyboard(modelRef.current, stageRef.current, -KEYBOARD_TRANSLATE_STEP, 0);
       } else if (event.key.toLowerCase() === "d") {
         event.preventDefault();
-        translateModelWithKeyboard(modelRef.current, KEYBOARD_TRANSLATE_STEP, 0);
+        translateModelWithKeyboard(modelRef.current, stageRef.current, KEYBOARD_TRANSLATE_STEP, 0);
       } else if (event.key.toLowerCase() === "w") {
         event.preventDefault();
-        translateModelWithKeyboard(modelRef.current, 0, KEYBOARD_TRANSLATE_STEP);
+        translateModelWithKeyboard(modelRef.current, stageRef.current, 0, KEYBOARD_TRANSLATE_STEP);
       } else if (event.key.toLowerCase() === "s") {
         event.preventDefault();
-        translateModelWithKeyboard(modelRef.current, 0, -KEYBOARD_TRANSLATE_STEP);
+        translateModelWithKeyboard(modelRef.current, stageRef.current, 0, -KEYBOARD_TRANSLATE_STEP);
       }
     };
 
@@ -333,6 +339,7 @@ export default function CustomizationViewer({
       renderer.dispose();
 
       modelRef.current = null;
+      stageRef.current = null;
       sceneRef.current = null;
       rendererRef.current = null;
       cameraRef.current = null;
@@ -539,7 +546,7 @@ export default function CustomizationViewer({
         ref={hostRef}
         className="h-full w-full cursor-grab active:cursor-grabbing"
         tabIndex={0}
-        aria-label="3D vehicle viewport. Drag left or right to rotate, use arrow keys to orbit, use plus or minus to zoom, and use W A S D to move the vehicle."
+        aria-label="3D vehicle viewport. Drag left or right to rotate, use arrow keys to orbit, use plus or minus to zoom, and use W A S D to move the vehicle and stage."
       />
 
       {!resolvedPath && (
@@ -564,7 +571,7 @@ export default function CustomizationViewer({
       )}
 
       <div className="pointer-events-none absolute bottom-4 left-4 rounded-md border border-white/15 bg-black/60 px-4 py-2 text-sm text-white shadow-lg backdrop-blur">
-        3D viewport — arrows orbit, +/- zoom, W/A/S/D move the vehicle
+        3D viewport — arrows orbit, +/- zoom, W/A/S/D move the vehicle and stage
       </div>
     </div>
   );
@@ -584,6 +591,7 @@ function isEditableKeyboardTarget(target: EventTarget | null) {
 
 function translateModelWithKeyboard(
   model: THREE.Group | null,
+  stage: THREE.Group | null,
   deltaX: number,
   deltaY: number,
 ) {
@@ -592,6 +600,12 @@ function translateModelWithKeyboard(
   model.position.x += deltaX;
   model.position.y += deltaY;
   model.updateMatrixWorld(true);
+
+  if (stage) {
+    stage.position.x += deltaX;
+    stage.position.y += deltaY;
+    stage.updateMatrixWorld(true);
+  }
 }
 
 function orbitCameraWithKeyboard(

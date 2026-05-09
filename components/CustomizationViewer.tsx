@@ -454,7 +454,7 @@ export default function CustomizationViewer({
           interiorColorRef.current,
         );
         applyWheelCustomization(group, wheelColorRef.current, wheelStyleRef.current);
-        applyDoorState(group, doorsOpenRef.current, exteriorColorRef.current);
+        applyDoorState(group, doorsOpenRef.current);
         applyWindowState(group, windowsDownRef.current);
 
         /**
@@ -503,7 +503,7 @@ export default function CustomizationViewer({
     if (!modelRef.current) return;
 
     applyColorsToScene(modelRef.current, exteriorColor, interiorColor);
-    applyDoorState(modelRef.current, doorsOpenRef.current, exteriorColor);
+    applyDoorState(modelRef.current, doorsOpenRef.current);
 
     if (interiorColor && previousInteriorColorRef.current !== interiorColor) {
       focusCameraOnInterior(modelRef.current, cameraRef.current, controlsRef.current);
@@ -537,7 +537,7 @@ export default function CustomizationViewer({
   useEffect(() => {
     if (!modelRef.current) return;
 
-    applyDoorState(modelRef.current, doorsOpen, exteriorColorRef.current);
+    applyDoorState(modelRef.current, doorsOpen);
 
     if (doorsOpen) {
       focusCameraOnDoors(modelRef.current, cameraRef.current, controlsRef.current);
@@ -1552,13 +1552,13 @@ function findWheelAnchors(group: THREE.Group): WheelAnchor[] {
   return anchors.slice(0, 4);
 }
 
-function applyDoorState(
-  group: THREE.Group,
-  open: boolean,
-  exteriorColor = "#1f2937",
-) {
+function applyDoorState(group: THREE.Group, open: boolean) {
+  /**
+   * Do not create fake/proxy doors. Only move real door nodes that exist in the
+   * loaded GLB. Models without separate door objects will remain unchanged.
+   */
   removeCustomChildren(group, "__custom_door_proxy");
-  let rotatedOriginalDoor = false;
+  const metrics = getCarMetrics(group);
 
   group.traverse((obj) => {
     if (isCustomizationHelper(obj)) return;
@@ -1566,143 +1566,60 @@ function applyDoorState(
     const name = (obj.name || "").toLowerCase();
     if (!name.includes("door")) return;
 
-    if (!obj.userData.__customOriginalRotation) {
-      obj.userData.__customOriginalRotation = obj.rotation.clone();
-    }
-
-    const originalRotation = obj.userData.__customOriginalRotation as THREE.Euler;
-    obj.rotation.copy(originalRotation);
+    restoreOriginalDoorTransform(obj);
 
     if (!open) return;
 
-    /**
-     * Rotate original door objects only when their authored pivot is usable.
-     * If the GLB has no separate door nodes, or its door pivot is at the car
-     * origin, fall back to a matching simulated open door instead of doing
-     * nothing.
-     */
-    if (!hasUsableDoorPivot(obj)) return;
-
-    const opensRight = name.includes("right") || name.includes("passenger");
-    obj.rotation.y += opensRight ? -0.72 : 0.72;
-    rotatedOriginalDoor = true;
+    rotateRealDoorAroundComputedHinge(obj, metrics);
   });
+}
 
-  if (open && !rotatedOriginalDoor) {
-    addSimulatedOpenDoors(group, exteriorColor);
+function restoreOriginalDoorTransform(obj: THREE.Object3D) {
+  if (!obj.userData.__customOriginalPosition) {
+    obj.userData.__customOriginalPosition = obj.position.clone();
+    obj.userData.__customOriginalQuaternion = obj.quaternion.clone();
+    obj.userData.__customOriginalScale = obj.scale.clone();
   }
+
+  obj.position.copy(obj.userData.__customOriginalPosition as THREE.Vector3);
+  obj.quaternion.copy(obj.userData.__customOriginalQuaternion as THREE.Quaternion);
+  obj.scale.copy(obj.userData.__customOriginalScale as THREE.Vector3);
+  obj.updateMatrixWorld(true);
 }
 
-function addSimulatedOpenDoors(group: THREE.Group, exteriorColor: string) {
-  const metrics = getCarMetrics(group);
-  const scale = getUniformWorldScale(group);
-  const length = Math.abs(metrics.lengthMax - metrics.lengthMin);
-  const width = Math.abs(metrics.widthMax - metrics.widthMin);
-  const doorLength = Math.max(length * 0.28, 1.0) / scale;
-  const doorHeight = Math.max(metrics.size.y * 0.42, 0.72) / scale;
-  const doorThickness = Math.max(width * 0.018, 0.035) / scale;
-  const doorY = metrics.box.min.y + metrics.size.y * 0.43;
-  const doorLengthCenter = metrics.lengthMin + length * 0.48;
-  const sideInset = width * 0.035;
-  const openAngle = 1.12;
-  const baseRotation = metrics.lengthAxis === "z" ? Math.PI / 2 : 0;
+function rotateRealDoorAroundComputedHinge(
+  obj: THREE.Object3D,
+  metrics: CarMetrics,
+) {
+  obj.updateWorldMatrix(true, true);
 
-  [metrics.widthMin, metrics.widthMax].forEach((sideWidth) => {
-    const sideDirection = sideWidth === metrics.widthMax ? 1 : -1;
-    const doorGroup = new THREE.Group();
-    doorGroup.name = "__custom_door_proxy";
-    doorGroup.userData.__customizationHelper = true;
+  const parent = obj.parent;
+  if (!parent) return;
 
-    const worldPosition = new THREE.Vector3(
-      metrics.center.x,
-      doorY,
-      metrics.center.z,
-    );
-    setAxisValue(worldPosition, metrics.lengthAxis, doorLengthCenter);
-    setAxisValue(
-      worldPosition,
-      metrics.widthAxis,
-      sideWidth + sideDirection * sideInset,
-    );
-    doorGroup.position.copy(group.worldToLocal(worldPosition));
-    doorGroup.rotation.y = baseRotation - sideDirection * openAngle;
+  const doorBox = new THREE.Box3().setFromObject(obj);
+  if (doorBox.isEmpty()) return;
 
-    const exteriorPanel = new THREE.Mesh(
-      new THREE.BoxGeometry(doorLength, doorHeight, doorThickness),
-      new THREE.MeshStandardMaterial({
-        color: exteriorColor,
-        metalness: 0.62,
-        roughness: 0.3,
-      }),
-    );
-    exteriorPanel.name = "__custom_door_proxy_panel";
-    exteriorPanel.userData.__customizationHelper = true;
-    exteriorPanel.position.x = doorLength * 0.5;
-    doorGroup.add(exteriorPanel);
+  const doorCenter = doorBox.getCenter(new THREE.Vector3());
+  const sideCenter = (metrics.widthMin + metrics.widthMax) / 2;
+  const sideSign = getAxisValue(doorCenter, metrics.widthAxis) >= sideCenter ? 1 : -1;
+  const hingeLength = FRONT_SIGN === 1
+    ? getAxisValue(doorBox.max, metrics.lengthAxis)
+    : getAxisValue(doorBox.min, metrics.lengthAxis);
+  const hingePoint = doorCenter.clone();
+  setAxisValue(hingePoint, metrics.lengthAxis, hingeLength);
 
-    const interiorPanel = new THREE.Mesh(
-      new THREE.BoxGeometry(doorLength * 0.94, doorHeight * 0.86, doorThickness * 1.08),
-      new THREE.MeshStandardMaterial({
-        color: "#0b0f16",
-        metalness: 0.18,
-        roughness: 0.78,
-      }),
-    );
-    interiorPanel.name = "__custom_door_proxy_inner";
-    interiorPanel.userData.__customizationHelper = true;
-    interiorPanel.position.set(doorLength * 0.52, 0, sideDirection * doorThickness * 0.72);
-    doorGroup.add(interiorPanel);
+  const openAngle = sideSign > 0 ? -0.95 : 0.95;
+  const parentWorldInverse = parent.matrixWorld.clone().invert();
+  const originalWorld = obj.matrixWorld.clone();
+  const hingeRotation = new THREE.Matrix4()
+    .makeTranslation(hingePoint.x, hingePoint.y, hingePoint.z)
+    .multiply(new THREE.Matrix4().makeRotationY(openAngle))
+    .multiply(new THREE.Matrix4().makeTranslation(-hingePoint.x, -hingePoint.y, -hingePoint.z));
+  const newWorld = hingeRotation.multiply(originalWorld);
+  const newLocal = parentWorldInverse.multiply(newWorld);
 
-    const trim = new THREE.Mesh(
-      new THREE.BoxGeometry(doorLength * 1.03, doorHeight * 1.03, doorThickness * 0.32),
-      new THREE.MeshBasicMaterial({
-        color: "#dce7f3",
-        wireframe: true,
-      }),
-    );
-    trim.name = "__custom_door_proxy_trim";
-    trim.userData.__customizationHelper = true;
-    trim.position.x = doorLength * 0.5;
-    trim.scale.set(1, 1, 1);
-    doorGroup.add(trim);
-    trim.renderOrder = -1;
-
-    const hinge = new THREE.Mesh(
-      new THREE.CylinderGeometry(doorThickness * 1.4, doorThickness * 1.4, doorHeight * 0.96, 18),
-      new THREE.MeshStandardMaterial({
-        color: "#c9d4df",
-        metalness: 0.85,
-        roughness: 0.2,
-      }),
-    );
-    hinge.name = "__custom_door_proxy_hinge";
-    hinge.userData.__customizationHelper = true;
-    hinge.rotation.z = Math.PI / 2;
-    doorGroup.add(hinge);
-
-    group.add(doorGroup);
-  });
-}
-
-function hasUsableDoorPivot(obj: THREE.Object3D) {
-  obj.updateWorldMatrix(true, false);
-
-  const box = new THREE.Box3().setFromObject(obj);
-  if (box.isEmpty()) return false;
-
-  const size = box.getSize(new THREE.Vector3());
-  const pivot = obj.getWorldPosition(new THREE.Vector3());
-  const center = box.getCenter(new THREE.Vector3());
-  const horizontalSpan = Math.max(size.x, size.z, 0.0001);
-  const margin = horizontalSpan * 0.12;
-  const pivotDistance = Math.hypot(pivot.x - center.x, pivot.z - center.z);
-  const pivotNearDoorBounds =
-    pivot.x >= box.min.x - margin &&
-    pivot.x <= box.max.x + margin &&
-    pivot.z >= box.min.z - margin &&
-    pivot.z <= box.max.z + margin;
-
-  return pivotNearDoorBounds && pivotDistance <= horizontalSpan * 0.75;
+  newLocal.decompose(obj.position, obj.quaternion, obj.scale);
+  obj.updateMatrixWorld(true);
 }
 
 function applyWindowState(group: THREE.Group, down: boolean) {

@@ -63,6 +63,7 @@ export default function CustomizationPanel({
   onLightsOnChange,
 }: CustomizationPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const hasRealDoorNodes = !["bmw-z8", "bmw-m3-cs-touring", "bmw-m3-topaz", "bmw-x5"].includes(model.id);
 
   return (
     <>
@@ -150,8 +151,14 @@ export default function CustomizationPanel({
           <section className="mb-5">
             <h3 className="mb-2 text-sm font-semibold">Interactive Features</h3>
             <div className="space-y-2">
-              <ToggleButton active={doorsOpen} onClick={() => onDoorsOpenChange?.(!doorsOpen)}>
-                {doorsOpen ? "Close doors" : "Open doors"}
+              <ToggleButton
+                active={doorsOpen}
+                disabled={!hasRealDoorNodes}
+                onClick={() => onDoorsOpenChange?.(!doorsOpen)}
+              >
+                {hasRealDoorNodes
+                  ? doorsOpen ? "Close doors" : "Open doors"
+                  : "Real doors unavailable for this model"}
               </ToggleButton>
               <ToggleButton active={windowsDown} onClick={() => onWindowsDownChange?.(!windowsDown)}>
                 {windowsDown ? "Roll windows up" : "Roll windows down"}
@@ -178,19 +185,24 @@ export default function CustomizationPanel({
 function ToggleButton({
   active,
   children,
+  disabled = false,
   onClick,
 }: {
   active: boolean;
   children: ReactNode;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       className={`w-full rounded-md border px-3 py-2 text-left text-sm font-medium transition ${
-        active
-          ? "border-[#6eb7ff] bg-[#1e4a86] text-white shadow-[0_0_18px_rgba(110,183,255,0.22)]"
-          : "border-white/15 bg-[rgba(9,18,31,0.65)] text-slate-100 hover:bg-white/10"
+        disabled
+          ? "cursor-not-allowed border-white/10 bg-[rgba(9,18,31,0.35)] text-slate-500"
+          : active
+            ? "border-[#6eb7ff] bg-[#1e4a86] text-white shadow-[0_0_18px_rgba(110,183,255,0.22)]"
+            : "border-white/15 bg-[rgba(9,18,31,0.65)] text-slate-100 hover:bg-white/10"
       }`}
     >
       {children}

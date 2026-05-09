@@ -546,30 +546,41 @@ function fitCameraToObject(
     2 * Math.atan(Math.tan(verticalFov / 2) * camera.aspect);
 
   /**
-   * 让车真正撑满大 canvas：
-   * 去掉原来的 size.z 深度补偿，否则相机会离车太远。
+   * Initial load must show a normal full-car view. Use the largest horizontal
+   * axis instead of assuming x is width; several GLBs are length-aligned on z,
+   * and fitting only x can place the camera inside the cabin/body.
    */
   const fitHeightDistance =
     size.y / (2 * Math.tan(verticalFov / 2) * CAMERA_FILL_RATIO);
 
   const fitWidthDistance =
-    size.x / (2 * Math.tan(horizontalFov / 2) * CAMERA_FILL_RATIO);
+    Math.max(size.x, size.z) /
+    (2 * Math.tan(horizontalFov / 2) * CAMERA_FILL_RATIO);
 
   const distance =
-    Math.max(fitHeightDistance, fitWidthDistance) * CAMERA_PADDING;
+    Math.max(fitHeightDistance, fitWidthDistance) * CAMERA_PADDING * 1.18;
 
+  const metrics = getCarMetrics(object as THREE.Group);
   const target = new THREE.Vector3(
     center.x,
-    center.y + size.y * 0.02,
+    center.y + size.y * 0.08,
     center.z,
   );
 
-  camera.position.set(
-    center.x,
-    center.y + size.y * 0.12,
-    center.z + distance,
+  const cameraPosition = target.clone();
+  setAxisValue(
+    cameraPosition,
+    metrics.lengthAxis,
+    getAxisValue(center, metrics.lengthAxis) + distance * 0.72,
   );
+  setAxisValue(
+    cameraPosition,
+    metrics.widthAxis,
+    getAxisValue(center, metrics.widthAxis) + distance * 0.46,
+  );
+  cameraPosition.y = center.y + size.y * 0.5;
 
+  camera.position.copy(cameraPosition);
   camera.lookAt(target);
 
   camera.near = Math.max(distance / 100, 0.01);
@@ -1089,7 +1100,9 @@ type CarMetrics = {
 };
 
 type WheelAnchor = {
+  box: THREE.Box3;
   center: THREE.Vector3;
+  radius: number;
 };
 
 function getCarMetrics(group: THREE.Group): CarMetrics {
@@ -1172,19 +1185,33 @@ function focusCameraOnWheels(
   const metrics = getCarMetrics(group);
   const length = Math.abs(metrics.lengthMax - metrics.lengthMin);
   const width = Math.abs(metrics.widthMax - metrics.widthMin);
-  const target = anchors[0]?.center.clone() ?? new THREE.Vector3(metrics.center.x, metrics.box.min.y + metrics.size.y * 0.22, metrics.center.z);
+  const anchor = anchors[0];
+  const target = anchor?.center.clone() ?? new THREE.Vector3(metrics.center.x, metrics.box.min.y + metrics.size.y * 0.24, metrics.center.z);
+  const radius = anchor?.radius ?? Math.max(metrics.size.y * 0.16, 0.55);
 
-  if (!anchors[0]) {
+  if (!anchor) {
     setAxisValue(target, metrics.lengthAxis, metrics.lengthMin + length * 0.72);
     setAxisValue(target, metrics.widthAxis, metrics.widthMax);
   }
 
-  const position = target.clone();
-  setAxisValue(position, metrics.lengthAxis, getAxisValue(target, metrics.lengthAxis) + length * 0.1);
-  setAxisValue(position, metrics.widthAxis, getAxisValue(target, metrics.widthAxis) + width * 0.62);
-  position.y += metrics.size.y * 0.08;
+  /**
+   * Aim at the wheel center and keep enough distance to frame the full tire.
+   * This keeps the selected wheel in the middle of the viewport instead of
+   * cropped against the bottom edge.
+   */
+  target.y += radius * 0.04;
 
-  moveCameraTo(camera, controls, position, target, 0.18);
+  const sideDirection = getAxisValue(target, metrics.widthAxis) >=
+    (metrics.widthMin + metrics.widthMax) / 2
+    ? 1
+    : -1;
+  const distance = Math.max(radius * 3.4, width * 0.48, metrics.size.y * 0.7);
+  const position = target.clone();
+  setAxisValue(position, metrics.lengthAxis, getAxisValue(target, metrics.lengthAxis) + length * 0.08);
+  setAxisValue(position, metrics.widthAxis, getAxisValue(target, metrics.widthAxis) + sideDirection * distance);
+  position.y = target.y + radius * 0.18;
+
+  moveCameraTo(camera, controls, position, target, Math.max(radius * 0.35, 0.18));
 }
 
 function focusCameraOnInterior(
@@ -1256,6 +1283,13 @@ function applyWheelCustomization(
     const name = getObjectSearchName(obj);
     if (!isWheelLikeName(name)) return;
 
+    if (isDecorativeWheelBlurName(name)) {
+      obj.visible = false;
+      return;
+    }
+
+    obj.visible = true;
+
     getMaterials(obj).forEach((material) => {
       const mat = material as any;
       if (!mat.color) return;
@@ -1279,19 +1313,20 @@ function applyWheelCustomization(
    * materials and then move the camera close to the actual wheel.
    */
   removeCustomChildren(group, "__custom_wheel_proxy");
+  removeLegacyWheelHelpers(group);
 }
 
 function findWheelAnchors(group: THREE.Group): WheelAnchor[] {
   const metrics = getCarMetrics(group);
   const maxModelAxis = Math.max(metrics.size.x, metrics.size.y, metrics.size.z, 1);
-  const anchors: WheelAnchor[] = [];
+  const wheelBoxes = new Map<string, THREE.Box3>();
 
   group.traverse((obj) => {
     if (!(obj instanceof THREE.Mesh)) return;
     if (isCustomizationHelper(obj)) return;
 
     const name = getObjectSearchName(obj);
-    if (!isWheelLikeName(name)) return;
+    if (!isWheelLikeName(name) || isDecorativeWheelBlurName(name)) return;
 
     obj.updateWorldMatrix(true, false);
     const box = new THREE.Box3().setFromObject(obj);
@@ -1304,11 +1339,31 @@ function findWheelAnchors(group: THREE.Group): WheelAnchor[] {
     }
 
     const center = box.getCenter(new THREE.Vector3());
-    const duplicate = anchors.some((anchor) => anchor.center.distanceTo(center) < maxModelAxis * 0.045);
+    const side = getAxisValue(center, metrics.widthAxis) >=
+      (metrics.widthMin + metrics.widthMax) / 2
+      ? "right"
+      : "left";
+    const axle = getAxisValue(center, metrics.lengthAxis) >=
+      (metrics.lengthMin + metrics.lengthMax) / 2
+      ? "front"
+      : "rear";
+    const key = `${side}-${axle}`;
+    const existing = wheelBoxes.get(key);
 
-    if (!duplicate) {
-      anchors.push({ center });
+    if (existing) {
+      existing.union(box);
+    } else {
+      wheelBoxes.set(key, box.clone());
     }
+  });
+
+  const anchors = Array.from(wheelBoxes.values()).map((box) => {
+    const size = box.getSize(new THREE.Vector3());
+    return {
+      box,
+      center: box.getCenter(new THREE.Vector3()),
+      radius: Math.max(size.x, size.y, size.z) * 0.5,
+    };
   });
 
   anchors.sort((a, b) => {
@@ -1326,9 +1381,9 @@ function applyDoorState(group: THREE.Group, open: boolean) {
   removeCustomChildren(group, "__custom_door_proxy");
 
   group.traverse((obj) => {
-    if (!(obj instanceof THREE.Mesh)) return;
+    if (isCustomizationHelper(obj)) return;
 
-    const name = getObjectSearchName(obj);
+    const name = (obj.name || "").toLowerCase();
     if (!name.includes("door")) return;
 
     if (!obj.userData.__customOriginalRotation) {
@@ -1337,55 +1392,40 @@ function applyDoorState(group: THREE.Group, open: boolean) {
 
     const originalRotation = obj.userData.__customOriginalRotation as THREE.Euler;
     obj.rotation.copy(originalRotation);
-    if (open) {
-      obj.rotation.y += name.includes("right") || name.includes("passenger") ? -0.42 : 0.42;
-    }
-  });
 
-  if (open) {
-    addSimulatedOpenDoors(group);
-  }
+    if (!open) return;
+
+    /**
+     * Do not add fake blue door panels. Only rotate original door objects when
+     * their pivot is inside/near the door bounds; otherwise leave the GLB clean
+     * because a bad pivot swings body panels through the car.
+     */
+    if (!hasUsableDoorPivot(obj)) return;
+
+    const opensRight = name.includes("right") || name.includes("passenger");
+    obj.rotation.y += opensRight ? -0.62 : 0.62;
+  });
 }
 
-function addSimulatedOpenDoors(group: THREE.Group) {
-  const metrics = getCarMetrics(group);
-  const scale = getUniformWorldScale(group);
-  const length = Math.abs(metrics.lengthMax - metrics.lengthMin);
-  const width = Math.abs(metrics.widthMax - metrics.widthMin);
-  const doorLength = (length * 0.28) / scale;
-  const doorHeight = (metrics.size.y * 0.38) / scale;
-  const doorY = metrics.box.min.y + metrics.size.y * 0.43;
-  const doorCenterLength = metrics.lengthMin + length * 0.48;
+function hasUsableDoorPivot(obj: THREE.Object3D) {
+  obj.updateWorldMatrix(true, false);
 
-  [metrics.widthMin, metrics.widthMax].forEach((sideWidth, index) => {
-    const direction = index === 0 ? -1 : 1;
-    const door = new THREE.Mesh(
-      new THREE.BoxGeometry(doorLength, doorHeight, 0.035 / scale),
-      new THREE.MeshStandardMaterial({
-        color: "#10233f",
-        metalness: 0.72,
-        roughness: 0.25,
-        transparent: true,
-        opacity: 0.9,
-      }),
-    );
+  const box = new THREE.Box3().setFromObject(obj);
+  if (box.isEmpty()) return false;
 
-    door.name = "__custom_door_proxy";
-    door.userData.__customizationHelper = true;
+  const size = box.getSize(new THREE.Vector3());
+  const pivot = obj.getWorldPosition(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const horizontalSpan = Math.max(size.x, size.z, 0.0001);
+  const margin = horizontalSpan * 0.12;
+  const pivotDistance = Math.hypot(pivot.x - center.x, pivot.z - center.z);
+  const pivotNearDoorBounds =
+    pivot.x >= box.min.x - margin &&
+    pivot.x <= box.max.x + margin &&
+    pivot.z >= box.min.z - margin &&
+    pivot.z <= box.max.z + margin;
 
-    const worldPosition = new THREE.Vector3(metrics.center.x, doorY, metrics.center.z);
-    setAxisValue(worldPosition, metrics.lengthAxis, doorCenterLength + length * 0.08 * direction);
-    setAxisValue(worldPosition, metrics.widthAxis, sideWidth + width * 0.18 * direction);
-    door.position.copy(group.worldToLocal(worldPosition));
-
-    if (metrics.widthAxis === "x") {
-      door.rotation.y = Math.PI / 2 + direction * 0.72;
-    } else {
-      door.rotation.y = direction * 0.72;
-    }
-
-    group.add(door);
-  });
+  return pivotNearDoorBounds && pivotDistance <= horizontalSpan * 0.75;
 }
 
 function applyWindowState(group: THREE.Group, down: boolean) {
@@ -1535,7 +1575,25 @@ function removeCustomChildren(parent: THREE.Object3D, name: string) {
 
   parent.traverse((obj) => {
     obj.children.forEach((child) => {
-      if (child.name === name) {
+      if (child.name === name || child.name.startsWith(`${name}_`)) {
+        toRemove.push(child);
+      }
+    });
+  });
+
+  toRemove.forEach((child) => {
+    child.parent?.remove(child);
+    disposeObject3D(child);
+  });
+}
+
+function removeLegacyWheelHelpers(parent: THREE.Object3D) {
+  const toRemove: THREE.Object3D[] = [];
+
+  parent.traverse((obj) => {
+    obj.children.forEach((child) => {
+      const name = (child.name || "").toLowerCase();
+      if (name.includes("custom") && name.includes("wheel")) {
         toRemove.push(child);
       }
     });
@@ -1560,6 +1618,18 @@ function isWheelLikeName(name: string) {
     name.includes("tyre") ||
     name.includes("tire") ||
     name.includes("tnrrims")
+  );
+}
+
+function isDecorativeWheelBlurName(name: string) {
+  return (
+    name.includes("tireblur") ||
+    name.includes("tyreblur") ||
+    name.includes("tire_blur") ||
+    name.includes("tyre_blur") ||
+    name.includes("wheelblur") ||
+    name.includes("wheel_blur") ||
+    name.includes("wheel1a_alpha")
   );
 }
 

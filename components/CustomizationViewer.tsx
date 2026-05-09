@@ -1159,6 +1159,7 @@ function moveCameraTo(
   position: THREE.Vector3,
   target: THREE.Vector3,
   minDistance = 0.8,
+  maxDistance?: number,
 ) {
   if (!camera) return;
 
@@ -1170,8 +1171,9 @@ function moveCameraTo(
 
   if (controls) {
     controls.target.copy(target);
+    const currentDistance = position.distanceTo(target);
     controls.minDistance = minDistance;
-    controls.maxDistance = Math.max(position.distanceTo(target) * 3, 6);
+    controls.maxDistance = Math.max(maxDistance ?? currentDistance * 3, currentDistance * 3, 6);
     controls.update();
   }
 }
@@ -1211,7 +1213,21 @@ function focusCameraOnWheels(
   setAxisValue(position, metrics.widthAxis, getAxisValue(target, metrics.widthAxis) + sideDirection * distance);
   position.y = target.y + radius * 0.18;
 
-  moveCameraTo(camera, controls, position, target, Math.max(radius * 0.35, 0.18));
+  /**
+   * After focusing a wheel, users still need to zoom back out to inspect the
+   * whole car. Keep the close wheel framing, but set a full-car max zoom range
+   * instead of capping OrbitControls around the close-up distance.
+   */
+  const wholeCarZoomDistance = Math.max(length * 2.4, width * 4.2, metrics.size.y * 7.5, distance * 8);
+
+  moveCameraTo(
+    camera,
+    controls,
+    position,
+    target,
+    Math.max(radius * 0.35, 0.18),
+    wholeCarZoomDistance,
+  );
 }
 
 function focusCameraOnInterior(

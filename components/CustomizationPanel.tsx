@@ -5,13 +5,25 @@ import type { CarModel } from "@/data/models";
 
 type CustomizationPanelProps = {
   model: CarModel;
+  onExteriorChange?: (hex: string) => void;
+  onInteriorChange?: (hex: string) => void;
 };
 
-const colors = ["Alpine White", "Black Sapphire", "Portimao Blue", "Frozen Grey"];
-const wheels = ["18-inch M Sport", "19-inch M Y-Spoke", "20-inch Aerodynamic"];
-const interiors = ["Black Leather", "Cognac Leather", "Ivory White Interior"];
+const colorOptions: Record<string, string> = {
+  "Alpine White": "#F8F8F4",
+  "Black Sapphire": "#0B1220",
+  "Portimao Blue": "#0B67D0",
+  "Frozen Grey": "#9BA3A8",
+  "Racing Red": "#B00020",
+};
 
-export default function CustomizationPanel({ model }: CustomizationPanelProps) {
+const interiors: Record<string, string> = {
+  "Black Leather": "#111217",
+  "Cognac Leather": "#8B4B2E",
+  "Ivory White": "#F2EEE9",
+};
+
+export default function CustomizationPanel({ model, onExteriorChange, onInteriorChange }: CustomizationPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -39,40 +51,31 @@ export default function CustomizationPanel({ model }: CustomizationPanelProps) {
           </div>
           <div className="mb-4">
             <h3 className="mb-2 text-sm font-semibold">Paint</h3>
-            {colors.map((item) => (
+            {Object.keys(colorOptions).map((label) => (
               <button
-                key={item}
-                className="mb-2 block w-full rounded-md border border-white/15 bg-[rgba(9,18,31,0.65)] px-3 py-2 text-left text-sm text-slate-100 transition hover:bg-white/10"
+                key={label}
+                onClick={() => onExteriorChange?.(colorOptions[label])}
+                className="mb-2 flex items-center gap-3 w-full rounded-md border border-white/15 bg-[rgba(9,18,31,0.65)] px-3 py-2 text-left text-sm text-slate-100 transition hover:bg-white/10"
               >
-                {item}
-              </button>
-            ))}
-          </div>
-          <div className="mb-4">
-            <h3 className="mb-2 text-sm font-semibold">Wheels</h3>
-            {wheels.map((item) => (
-              <button
-                key={item}
-                className="mb-2 block w-full rounded-md border border-white/15 bg-[rgba(9,18,31,0.65)] px-3 py-2 text-left text-sm text-slate-100 transition hover:bg-white/10"
-              >
-                {item}
+                <span className="inline-block h-5 w-10 rounded" style={{ background: colorOptions[label] }} />
+                <span>{label}</span>
               </button>
             ))}
           </div>
           <div className="mb-4">
             <h3 className="mb-2 text-sm font-semibold">Interior</h3>
-            {interiors.map((item) => (
+            {Object.keys(interiors).map((label) => (
               <button
-                key={item}
-                className="mb-2 block w-full rounded-md border border-white/15 bg-[rgba(9,18,31,0.65)] px-3 py-2 text-left text-sm text-slate-100 transition hover:bg-white/10"
+                key={label}
+                onClick={() => onInteriorChange?.(interiors[label])}
+                className="mb-2 flex items-center gap-3 w-full rounded-md border border-white/15 bg-[rgba(9,18,31,0.65)] px-3 py-2 text-left text-sm text-slate-100 transition hover:bg-white/10"
               >
-                {item}
+                <span className="inline-block h-5 w-10 rounded" style={{ background: interiors[label] }} />
+                <span>{label}</span>
               </button>
             ))}
           </div>
-          <p className="text-sm text-slate-300">
-            Three.js integration placeholder for {model.name} GLTF model.
-          </p>
+          <p className="text-sm text-slate-300">Three.js customization controls for {model.name}.</p>
         </aside>
         <button
           type="button"

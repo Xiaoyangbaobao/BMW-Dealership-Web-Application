@@ -137,12 +137,30 @@ export default function ModelCard({ models }: ModelCardProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [loadState, setLoadState] = useState("Initializing stage");
   const canvasHostRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLElement | null>(null);
   const carGroupRef = useRef<THREE.Group | null>(null);
   const rotationRef = useRef(0);
   const targetRotationRef = useRef(0);
   const zoomRef = useRef(10.9);
   const targetZoomRef = useRef(10.9);
+  const preloaded = useRef<Record<string, any>>({});
+  const hasFocusRef = useRef(false);
   const activeCar = stageCars[activeIndex];
+
+  const preloadModel = (path: string) => {
+    if (!path || preloaded.current[path]) return;
+    const loader = new GLTFLoader();
+    loader.load(
+      path,
+      (gltf) => {
+        preloaded.current[path] = gltf;
+      },
+      undefined,
+      () => {
+        // ignore preload errors
+      },
+    );
+  };
 
   const customizationHref = useMemo(() => {
     const fallbackSlug = models[0]?.id ?? "bmw-5-series";
@@ -311,6 +329,21 @@ export default function ModelCard({ models }: ModelCardProps) {
 
     animate();
 
+    // focus tracking so keyboard navigation only applies when component has focus
+    const onFocusIn = () => (hasFocusRef.current = true);
+    const onFocusOut = () => (hasFocusRef.current = false);
+
+    const onKey = (e: KeyboardEvent) => {
+      if (!hasFocusRef.current) return;
+      if (e.key === "ArrowLeft") shiftModel(-1);
+      if (e.key === "ArrowRight") shiftModel(1);
+    };
+
+    const cont = containerRef.current;
+    cont?.addEventListener("focusin", onFocusIn);
+    cont?.addEventListener("focusout", onFocusOut);
+    window.addEventListener("keydown", onKey);
+
     return () => {
       window.cancelAnimationFrame(animationId);
       window.removeEventListener("resize", resize);
@@ -329,6 +362,9 @@ export default function ModelCard({ models }: ModelCardProps) {
       });
       renderer.dispose();
       carGroupRef.current = null;
+      cont?.removeEventListener("focusin", onFocusIn);
+      cont?.removeEventListener("focusout", onFocusOut);
+      window.removeEventListener("keydown", onKey);
     };
   }, []);
 
@@ -342,6 +378,10 @@ export default function ModelCard({ models }: ModelCardProps) {
     let cancelled = false;
     const loader = new GLTFLoader();
     setLoadState(`Loading ${activeCar.name}`);
+    // debug: log the model path we're about to load
+    // (helps verify public/models filenames and network requests)
+    // eslint-disable-next-line no-console
+    console.log("[ModelCard] loading model:", activeCar.modelPath);
 
     while (group.children.length > 0) {
       const child = group.children[0];
@@ -351,9 +391,7 @@ export default function ModelCard({ models }: ModelCardProps) {
     loader.load(
       activeCar.modelPath,
       (gltf) => {
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
         const model = gltf.scene;
         const pivot = new THREE.Group();
@@ -400,11 +438,20 @@ export default function ModelCard({ models }: ModelCardProps) {
         targetRotationRef.current += Math.PI * 0.35;
         setLoadState("Ready");
       },
-      undefined,
-      () => {
-        if (!cancelled) {
-          setLoadState("Model failed to load");
+      (xhr) => {
+        try {
+          if (xhr?.loaded && xhr?.total) {
+            const pct = Math.round((xhr.loaded / xhr.total) * 100);
+            setLoadState(`Loading ${activeCar.name} — ${pct}%`);
+          }
+        } catch (e) {
+          /* ignore */
         }
+      },
+      (error) => {
+        // eslint-disable-next-line no-console
+        console.error("[ModelCard] GLTF load error:", activeCar.modelPath, error);
+        if (!cancelled) setLoadState(`Failed to load ${activeCar.name}`);
       },
     );
 
@@ -422,7 +469,13 @@ export default function ModelCard({ models }: ModelCardProps) {
   };
 
   return (
-    <section className="h-full overflow-hidden rounded-2xl border border-[#26354a] bg-[linear-gradient(135deg,rgba(6,11,24,0.99),rgba(3,7,16,0.99)_52%,rgba(4,13,27,0.98))] shadow-[0_28px_90px_rgba(0,0,0,0.5)]">
+    <section
+      ref={(el) => {
+        containerRef.current = el;
+      }}
+      tabIndex={0}
+      className="h-full overflow-hidden rounded-2xl border border-[#26354a] bg-[linear-gradient(135deg,rgba(6,11,24,0.99),rgba(3,7,16,0.99)_52%,rgba(4,13,27,0.98))] shadow-[0_28px_90px_rgba(0,0,0,0.5)]"
+    >
       <div className="grid h-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_370px]">
         <div className="relative min-h-[520px] overflow-hidden">
           <div className="absolute left-5 top-5 z-[2] sm:left-8 sm:top-8">
@@ -449,15 +502,30 @@ export default function ModelCard({ models }: ModelCardProps) {
             </button>
           </div>
 
-          <div
-            ref={canvasHostRef}
-            className="h-full min-h-[520px] w-full cursor-grab active:cursor-grabbing [&_canvas]:block [&_canvas]:h-full [&_canvas]:w-full"
-          />
+          <div className="relative h-full min-h-[520px] w-full">
+            <div
+              ref={canvasHostRef}
+              className="h-full min-h-[520px] w-full cursor-grab active:cursor-grabbing [&_canvas]:block [&_canvas]:h-full [&_canvas]:w-full"
+            />
+
+            {loadState !== "Ready" && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40">
+                <div className="flex flex-col items-center gap-3">
+                  <div className="animate-spin h-10 w-10 rounded-full border-4 border-t-transparent border-white/60" />
+                  <div className="text-sm text-white">{loadState}</div>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-64 bg-gradient-to-t from-[#030711] via-[#030711]/76 to-transparent" />
           <div className="absolute bottom-5 left-5 right-5 z-[2] sm:bottom-7 sm:left-7 sm:right-7">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <span className="rounded-full border border-[#68a7ff]/40 bg-black/35 px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#d2e5ff] backdrop-blur">
+              <span
+                role="status"
+                aria-live="polite"
+                className="rounded-full border border-[#68a7ff]/40 bg-black/35 px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#d2e5ff] backdrop-blur"
+              >
                 {loadState}
               </span>
               <span className="hidden rounded-full border border-white/15 bg-black/35 px-4 py-2 text-xs uppercase tracking-[0.14em] text-slate-300 backdrop-blur sm:inline-block">
@@ -473,7 +541,10 @@ export default function ModelCard({ models }: ModelCardProps) {
                     key={car.id}
                     type="button"
                     onClick={() => selectModel(index)}
-                    className={`min-w-[215px] snap-center rounded-xl border px-5 py-4 text-left backdrop-blur transition duration-300 ${
+                    onMouseEnter={() => preloadModel(car.modelPath)}
+                    onFocus={() => preloadModel(car.modelPath)}
+                    aria-pressed={isActive}
+                    className={`min-w-[215px] snap-center rounded-xl border px-5 py-4 text-left backdrop-blur transition duration-300 focus:outline-none focus:ring-2 focus:ring-[#79adff] ${
                       isActive
                         ? "border-[#79adff] bg-[#12345f]/80 shadow-[0_0_28px_rgba(79,141,230,0.4)]"
                         : "border-white/10 bg-black/32 opacity-72 hover:border-white/25 hover:opacity-100"

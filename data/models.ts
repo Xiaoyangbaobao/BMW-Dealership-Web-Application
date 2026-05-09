@@ -9,6 +9,7 @@ export type CarModel = {
   range: string;
   horsepower: number;
   heroImage: string;
+  modelPath?: string;
   description: string;
 };
 

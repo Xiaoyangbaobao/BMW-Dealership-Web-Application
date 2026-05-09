@@ -154,7 +154,7 @@ export default function CustomizationViewer({
     renderer.setClearColor(SCENE_BACKGROUND, 1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
+    renderer.toneMappingExposure = 1.22;
 
     if ("physicallyCorrectLights" in renderer) {
       (renderer as any).physicallyCorrectLights = true;
@@ -180,27 +180,34 @@ export default function CustomizationViewer({
 
     controlsRef.current = controls;
 
-    const hemi = new THREE.HemisphereLight("#d8e8ff", "#08101f", 1.7);
+    const hemi = new THREE.HemisphereLight("#eef6ff", "#101a2c", 2.15);
     scene.add(hemi);
 
-    const overheadFill = new THREE.DirectionalLight("#ffffff", 2.1);
-    overheadFill.position.set(0, 9.5, 1.5);
+    const ambientFill = new THREE.AmbientLight("#dcecff", 0.72);
+    scene.add(ambientFill);
+
+    const overheadFill = new THREE.DirectionalLight("#ffffff", 3.35);
+    overheadFill.position.set(0, 10.5, 2.2);
     scene.add(overheadFill);
+
+    const frontPanelFill = new THREE.DirectionalLight("#d7ecff", 1.65);
+    frontPanelFill.position.set(0, 4.4, 8.8);
+    scene.add(frontPanelFill);
 
     const topDownSpot = new THREE.SpotLight(
       "#ffffff",
-      360,
+      640,
       22,
-      Math.PI / 4.8,
-      0.58,
-      1.05,
+      Math.PI / 4.4,
+      0.5,
+      0.92,
     );
-    topDownSpot.position.set(0, 8.8, 0.8);
+    topDownSpot.position.set(0, 9.8, 1.2);
     scene.add(topDownSpot);
 
     const keyLight = new THREE.SpotLight(
-      "#8dbbff",
-      430,
+      "#b9d8ff",
+      560,
       30,
       Math.PI / 5,
       0.35,
@@ -211,7 +218,7 @@ export default function CustomizationViewer({
 
     const rimLight = new THREE.SpotLight(
       "#ffffff",
-      240,
+      320,
       24,
       Math.PI / 6,
       0.4,

@@ -19,36 +19,25 @@ export default function CustomizationApp({ model }: Props) {
   const [doorsOpen, setDoorsOpen] = useState(false);
   const [windowsDown, setWindowsDown] = useState(false);
   const [lightsOn, setLightsOn] = useState(false);
-  const [wheelFocusNonce, setWheelFocusNonce] = useState(0);
+  const [wheelFocusKey, setWheelFocusKey] = useState(0);
+
+  const focusWheelAfterSelection = () => {
+    setWheelFocusKey((key) => key + 1);
+  };
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-96px)] w-full max-w-none overflow-hidden px-0 py-0">
-      <div className="grid min-h-0 w-full grid-cols-1 items-stretch gap-0 lg:grid-cols-[minmax(0,1fr)_360px]">
-        {/* 左边全屏车辆视图 */}
-        <div className="relative flex min-h-0 min-w-0 flex-col">
-          <div className="pointer-events-none absolute left-6 top-6 z-10 max-w-xl rounded-2xl border border-white/10 bg-black/35 px-5 py-4 shadow-2xl backdrop-blur-md">
+    <div className="mx-auto flex min-h-[calc(100vh-96px)] w-full max-w-none px-4 py-4 lg:px-8">
+      <div className="grid min-h-0 w-full grid-cols-1 items-stretch gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+        {/* 左边全屏车辆视窗 */}
+        <div className="relative h-[calc(100vh-128px)] min-w-0 overflow-hidden rounded-2xl border border-white/15">
+          <div className="pointer-events-none absolute left-5 top-5 z-10 max-w-xl rounded-xl border border-white/10 bg-black/35 px-4 py-3 shadow-lg backdrop-blur">
             <p className="m-0 text-xs uppercase tracking-[0.22em] text-[#4f8de6]">
               Model Customization
             </p>
             <h1 className="my-1 text-3xl font-bold text-slate-100">
               {model.name}
             </h1>
-
-            <p className="text-slate-300">{model.description}</p>
-          </div>
-
-          <div className="relative min-h-0 flex-1 overflow-hidden border-r border-white/15">
-            <CustomizationViewer
-              model={model}
-              exteriorColor={exterior}
-              interiorColor={interior}
-              wheelColor={wheelColor}
-              wheelStyle={wheelStyle}
-              doorsOpen={doorsOpen}
-              windowsDown={windowsDown}
-              lightsOn={lightsOn}
-              wheelFocusNonce={wheelFocusNonce}
-            />
+            <p className="text-sm text-slate-300">{model.description}</p>
           </div>
           <CustomizationViewer
             model={model}
@@ -59,11 +48,12 @@ export default function CustomizationApp({ model }: Props) {
             doorsOpen={doorsOpen}
             windowsDown={windowsDown}
             lightsOn={lightsOn}
+            wheelFocusKey={wheelFocusKey}
           />
         </div>
 
-        {/* 右边 1/4 */}
-        <div className="min-h-0 min-w-0 border-l border-white/10 bg-[#071020] lg:h-[calc(100vh-96px)] lg:overflow-y-auto">
+        {/* 右边控制栏 */}
+        <div className="min-h-0 min-w-0 lg:sticky lg:top-[88px] lg:h-[calc(100vh-120px)] lg:overflow-y-auto">
           <CustomizationPanel
             model={model}
             doorsOpen={doorsOpen}
@@ -73,11 +63,11 @@ export default function CustomizationApp({ model }: Props) {
             onInteriorChange={(c: string) => setInterior(c)}
             onWheelColorChange={(c: string) => {
               setWheelColor(c);
-              setWheelFocusNonce((value) => value + 1);
+              focusWheelAfterSelection();
             }}
             onWheelStyleChange={(style) => {
               setWheelStyle(style);
-              setWheelFocusNonce((value) => value + 1);
+              focusWheelAfterSelection();
             }}
             onDoorsOpenChange={setDoorsOpen}
             onWindowsDownChange={setWindowsDown}

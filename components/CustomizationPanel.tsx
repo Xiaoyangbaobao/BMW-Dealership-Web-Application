@@ -103,7 +103,7 @@ export default function CustomizationPanel({
           <section className="mb-5">
             <h3 className="mb-2 text-sm font-semibold">Wheels</h3>
             <p className="mb-2 text-xs text-slate-400">
-              Change wheel finish or choose a simulated rim design. The camera zooms to the wheels.
+              Change wheel finish or style. The camera zooms to the car’s actual wheel after selection.
             </p>
             {Object.keys(wheelColors).map((label) => (
               <button

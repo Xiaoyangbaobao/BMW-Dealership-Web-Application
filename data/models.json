@@ -8,6 +8,7 @@
     "range": "Petrol / Hybrid",
     "horsepower": 335,
     "heroImage": "/images/bmw-showroom-reference.png",
+    "modelPath": "/models/2025_bmw_m4_competition.glb",
     "description": "Executive performance sedan with dynamic handling and premium comfort."
   },
   {
@@ -30,6 +31,7 @@
     "range": "Petrol",
     "horsepower": 382,
     "heroImage": "/images/bmw-showroom-reference.png",
+    "modelPath": "/models/bmw_x3_m40i.glb",
     "description": "Performance-oriented compact SUV with sporty chassis tuning and dynamic handling."
   },
   {
@@ -41,6 +43,7 @@
     "range": "Full Electric",
     "horsepower": 536,
     "heroImage": "/images/bmw-showroom-reference.png",
+    "modelPath": "/models/bmw_m4_f82.glb",
     "description": "Fully electric gran coupe that combines modern tech with signature BMW dynamics."
   },
   {
@@ -52,6 +55,7 @@
     "range": "Petrol",
     "horsepower": 543,
     "heroImage": "/images/bmw-showroom-reference.png",
+    "modelPath": "/models/2025_bmw_m3_cs_touring.glb",
     "description": "A carbon-focused performance wagon with all-wheel drive traction and daily usable pace."
   },
   {
@@ -63,6 +67,7 @@
     "range": "Petrol",
     "horsepower": 503,
     "heroImage": "/images/bmw-showroom-reference.png",
+    "modelPath": "/models/2025_bmw_m4_competition.glb",
     "description": "Aggressive competition-spec coupe tuned for high-speed stability and sharp handling."
   }
 ]

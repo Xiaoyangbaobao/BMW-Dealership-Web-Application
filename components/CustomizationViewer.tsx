@@ -166,7 +166,10 @@ export default function CustomizationViewer({
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enablePan = false;
+    controls.enableRotate = true;
     controls.enableZoom = true;
+    controls.rotateSpeed = 0.7;
+    controls.zoomSpeed = 0.9;
     controls.enableDamping = true;
     controls.dampingFactor = 0.12;
     controls.autoRotate = false;
@@ -233,16 +236,9 @@ export default function CustomizationViewer({
     innerRing.position.y = -0.37;
     scene.add(innerRing);
 
-    const clock = new THREE.Clock();
     let rafId: number | null = null;
 
     const animate = () => {
-      const t = clock.getElapsedTime();
-
-      if (modelRef.current) {
-        modelRef.current.rotation.y = Math.sin(t * 0.25) * 0.06;
-      }
-
       controls.update();
       renderer.render(scene, camera);
 
@@ -263,6 +259,32 @@ export default function CustomizationViewer({
       }
     };
 
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isEditableKeyboardTarget(event.target)) return;
+
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        orbitCameraWithKeyboard(camera, controls, -0.14, 0);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        orbitCameraWithKeyboard(camera, controls, 0.14, 0);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        orbitCameraWithKeyboard(camera, controls, 0, -0.1);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        orbitCameraWithKeyboard(camera, controls, 0, 0.1);
+      } else if (event.key === "+" || event.key === "=") {
+        event.preventDefault();
+        zoomCameraWithKeyboard(camera, controls, 0.84);
+      } else if (event.key === "-" || event.key === "_") {
+        event.preventDefault();
+        zoomCameraWithKeyboard(camera, controls, 1.18);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
     let resizeObserver: ResizeObserver | null = null;
 
     if (typeof ResizeObserver !== "undefined") {
@@ -281,6 +303,8 @@ export default function CustomizationViewer({
       } else {
         window.removeEventListener("resize", onResize);
       }
+
+      window.removeEventListener("keydown", onKeyDown);
 
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
@@ -497,8 +521,13 @@ export default function CustomizationViewer({
   const resolvedPath = modelPath ?? model.modelPath ?? pathMap[model.id] ?? "";
 
   return (
-    <div className="relative h-full min-h-[calc(100vh-96px)] w-full overflow-hidden bg-[#050915]">
-      <div ref={hostRef} className="h-full w-full" />
+    <div className="relative h-full min-h-[420px] w-full overflow-hidden rounded-lg bg-[#050915]">
+      <div
+        ref={hostRef}
+        className="h-full w-full cursor-grab active:cursor-grabbing"
+        tabIndex={0}
+        aria-label="3D vehicle viewport. Drag left or right to rotate, use arrow keys to orbit, and use plus or minus to zoom."
+      />
 
       {!resolvedPath && (
         <div className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-slate-300">
@@ -526,6 +555,61 @@ export default function CustomizationViewer({
       </div>
     </div>
   );
+}
+
+function isEditableKeyboardTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+
+  const tagName = target.tagName.toLowerCase();
+  return (
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select" ||
+    target.isContentEditable
+  );
+}
+
+function orbitCameraWithKeyboard(
+  camera: THREE.PerspectiveCamera,
+  controls: OrbitControls,
+  azimuthDelta: number,
+  polarDelta: number,
+) {
+  const target = controls.target.clone();
+  const offset = camera.position.clone().sub(target);
+  const spherical = new THREE.Spherical().setFromVector3(offset);
+
+  spherical.theta += azimuthDelta;
+  spherical.phi = THREE.MathUtils.clamp(
+    spherical.phi + polarDelta,
+    0.18,
+    Math.PI - 0.18,
+  );
+
+  offset.setFromSpherical(spherical);
+  camera.position.copy(target).add(offset);
+  camera.lookAt(target);
+  controls.update();
+}
+
+function zoomCameraWithKeyboard(
+  camera: THREE.PerspectiveCamera,
+  controls: OrbitControls,
+  factor: number,
+) {
+  const target = controls.target.clone();
+  const offset = camera.position.clone().sub(target);
+  const currentDistance = offset.length();
+  const nextDistance = THREE.MathUtils.clamp(
+    currentDistance * factor,
+    controls.minDistance || 0.1,
+    controls.maxDistance || currentDistance * 8,
+  );
+
+  offset.setLength(nextDistance);
+  camera.position.copy(target).add(offset);
+  camera.lookAt(target);
+  controls.update();
 }
 
 function fitCameraToObject(

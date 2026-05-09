@@ -180,8 +180,23 @@ export default function CustomizationViewer({
 
     controlsRef.current = controls;
 
-    const hemi = new THREE.HemisphereLight("#9fc6ff", "#08101f", 1.4);
+    const hemi = new THREE.HemisphereLight("#d8e8ff", "#08101f", 1.7);
     scene.add(hemi);
+
+    const overheadFill = new THREE.DirectionalLight("#ffffff", 2.1);
+    overheadFill.position.set(0, 9.5, 1.5);
+    scene.add(overheadFill);
+
+    const topDownSpot = new THREE.SpotLight(
+      "#ffffff",
+      360,
+      22,
+      Math.PI / 4.8,
+      0.58,
+      1.05,
+    );
+    topDownSpot.position.set(0, 8.8, 0.8);
+    scene.add(topDownSpot);
 
     const keyLight = new THREE.SpotLight(
       "#8dbbff",

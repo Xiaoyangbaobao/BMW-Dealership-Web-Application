@@ -35,19 +35,19 @@ const SCENE_BACKGROUND = 0x050915;
  * 车模型整体大小。
  * 数值越大，模型越大。
  */
-const MODEL_TARGET_SIZE = 8.2;
+const MODEL_TARGET_SIZE = 9.6;
 
 /**
  * 相机距离系数。
  * 数值越小，车越大。
  */
-const CAMERA_PADDING = 0.62;
+const CAMERA_PADDING = 0.46;
 
 /**
  * 车在画面里的填充比例。
  * 数值越大，车越撑满画布。
  */
-const CAMERA_FILL_RATIO = 0.78;
+const CAMERA_FILL_RATIO = 1.18;
 
 const FLOOR_TOP_Y = -0.42;
 const MODEL_FLOOR_GAP = 0.02;
@@ -137,7 +137,7 @@ export default function CustomizationViewer({
     const width = Math.max(host.clientWidth, 1);
     const height = Math.max(host.clientHeight, 1);
 
-    const camera = new THREE.PerspectiveCamera(25, width / height, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(22, width / height, 0.1, 1000);
     camera.position.set(0, 1.2, 10);
     cameraRef.current = camera;
 

@@ -30,8 +30,7 @@ export default function CustomizationApp({ model }: Props) {
             <p className="m-0 text-xs uppercase tracking-[0.22em] text-[#4f8de6]">
               Model Customization
             </p>
-
-            <h1 className="my-2 text-4xl font-bold text-slate-100">
+            <h1 className="my-1 text-3xl font-bold text-slate-100">
               {model.name}
             </h1>
 
@@ -51,6 +50,16 @@ export default function CustomizationApp({ model }: Props) {
               wheelFocusNonce={wheelFocusNonce}
             />
           </div>
+          <CustomizationViewer
+            model={model}
+            exteriorColor={exterior}
+            interiorColor={interior}
+            wheelColor={wheelColor}
+            wheelStyle={wheelStyle}
+            doorsOpen={doorsOpen}
+            windowsDown={windowsDown}
+            lightsOn={lightsOn}
+          />
         </div>
 
         {/* 右边 1/4 */}

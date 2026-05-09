@@ -289,16 +289,16 @@ export default function CustomizationViewer({
         zoomCameraWithKeyboard(camera, controls, 1.18);
       } else if (event.key.toLowerCase() === "a") {
         event.preventDefault();
-        translateModelWithKeyboard(modelRef.current, stageRef.current, -KEYBOARD_TRANSLATE_STEP, 0);
+        translateModelWithKeyboard(camera, modelRef.current, stageRef.current, -KEYBOARD_TRANSLATE_STEP, 0);
       } else if (event.key.toLowerCase() === "d") {
         event.preventDefault();
-        translateModelWithKeyboard(modelRef.current, stageRef.current, KEYBOARD_TRANSLATE_STEP, 0);
+        translateModelWithKeyboard(camera, modelRef.current, stageRef.current, KEYBOARD_TRANSLATE_STEP, 0);
       } else if (event.key.toLowerCase() === "w") {
         event.preventDefault();
-        translateModelWithKeyboard(modelRef.current, stageRef.current, 0, KEYBOARD_TRANSLATE_STEP);
+        translateModelWithKeyboard(camera, modelRef.current, stageRef.current, 0, KEYBOARD_TRANSLATE_STEP);
       } else if (event.key.toLowerCase() === "s") {
         event.preventDefault();
-        translateModelWithKeyboard(modelRef.current, stageRef.current, 0, -KEYBOARD_TRANSLATE_STEP);
+        translateModelWithKeyboard(camera, modelRef.current, stageRef.current, 0, -KEYBOARD_TRANSLATE_STEP);
       }
     };
 
@@ -590,20 +590,33 @@ function isEditableKeyboardTarget(target: EventTarget | null) {
 }
 
 function translateModelWithKeyboard(
+  camera: THREE.PerspectiveCamera,
   model: THREE.Group | null,
   stage: THREE.Group | null,
-  deltaX: number,
-  deltaY: number,
+  deltaScreenX: number,
+  deltaScreenY: number,
 ) {
   if (!model) return;
 
-  model.position.x += deltaX;
-  model.position.y += deltaY;
+  /**
+   * Translate in screen space instead of fixed world x/y. This keeps A/D moving
+   * visually left/right after the camera has orbited to a side view, instead of
+   * accidentally pushing the car forward/backward in depth.
+   */
+  const screenRight = new THREE.Vector3();
+  const screenUp = new THREE.Vector3();
+  camera.updateMatrixWorld(true);
+  camera.matrixWorld.extractBasis(screenRight, screenUp, new THREE.Vector3());
+
+  const movement = screenRight
+    .multiplyScalar(deltaScreenX)
+    .add(screenUp.multiplyScalar(deltaScreenY));
+
+  model.position.add(movement);
   model.updateMatrixWorld(true);
 
   if (stage) {
-    stage.position.x += deltaX;
-    stage.position.y += deltaY;
+    stage.position.add(movement);
     stage.updateMatrixWorld(true);
   }
 }

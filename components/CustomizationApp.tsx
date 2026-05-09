@@ -5,6 +5,8 @@ import type { CarModel } from "@/data/models";
 import CustomizationViewer from "./CustomizationViewer";
 import CustomizationPanel from "./CustomizationPanel";
 
+export type WheelStyle = "classic" | "sport" | "aero";
+
 type Props = {
   model: CarModel;
 };
@@ -12,6 +14,11 @@ type Props = {
 export default function CustomizationApp({ model }: Props) {
   const [exterior, setExterior] = useState<string>("#1f2937");
   const [interior, setInterior] = useState<string>("#0b1220");
+  const [wheelColor, setWheelColor] = useState<string>("#cfd6df");
+  const [wheelStyle, setWheelStyle] = useState<WheelStyle>("classic");
+  const [doorsOpen, setDoorsOpen] = useState(false);
+  const [windowsDown, setWindowsDown] = useState(false);
+  const [lightsOn, setLightsOn] = useState(false);
 
   return (
     <div className="mx-auto flex min-h-[calc(100vh-96px)] w-full max-w-none px-4 py-6 lg:px-8">
@@ -35,6 +42,11 @@ export default function CustomizationApp({ model }: Props) {
               model={model}
               exteriorColor={exterior}
               interiorColor={interior}
+              wheelColor={wheelColor}
+              wheelStyle={wheelStyle}
+              doorsOpen={doorsOpen}
+              windowsDown={windowsDown}
+              lightsOn={lightsOn}
             />
           </div>
         </div>
@@ -43,8 +55,16 @@ export default function CustomizationApp({ model }: Props) {
         <div className="min-h-0 min-w-0 lg:sticky lg:top-[88px] lg:h-[calc(100vh-120px)] lg:overflow-y-auto">
           <CustomizationPanel
             model={model}
+            doorsOpen={doorsOpen}
+            windowsDown={windowsDown}
+            lightsOn={lightsOn}
             onExteriorChange={(c: string) => setExterior(c)}
             onInteriorChange={(c: string) => setInterior(c)}
+            onWheelColorChange={(c: string) => setWheelColor(c)}
+            onWheelStyleChange={setWheelStyle}
+            onDoorsOpenChange={setDoorsOpen}
+            onWindowsDownChange={setWindowsDown}
+            onLightsOnChange={setLightsOn}
           />
         </div>
       </div>

@@ -1397,15 +1397,53 @@ function focusCameraOnInterior(
   const metrics = getCarMetrics(group);
   const length = Math.abs(metrics.lengthMax - metrics.lengthMin);
   const width = Math.abs(metrics.widthMax - metrics.widthMin);
-  const target = new THREE.Vector3(metrics.center.x, metrics.box.min.y + metrics.size.y * 0.55, metrics.center.z);
-  setAxisValue(target, metrics.lengthAxis, metrics.lengthMin + length * 0.52);
+  const target = new THREE.Vector3(
+    metrics.center.x,
+    metrics.box.min.y + metrics.size.y * 0.58,
+    metrics.center.z,
+  );
+  setAxisValue(target, metrics.lengthAxis, metrics.lengthMin + length * 0.5);
 
+  /**
+   * Use an elevated front-quarter cabin view instead of placing the camera deep
+   * inside the dark dashboard. This frames seats/console through the windshield
+   * or open cabin while avoiding a nearly black close-up surface.
+   */
   const position = target.clone();
-  setAxisValue(position, metrics.lengthAxis, getAxisValue(target, metrics.lengthAxis) - length * 0.18);
-  setAxisValue(position, metrics.widthAxis, getAxisValue(target, metrics.widthAxis) + width * 0.18);
-  position.y += metrics.size.y * 0.06;
+  setAxisValue(position, metrics.lengthAxis, metrics.lengthMin + length * 0.18);
+  setAxisValue(position, metrics.widthAxis, metrics.widthMax + width * 0.28);
+  position.y = metrics.box.min.y + metrics.size.y * 0.86;
 
-  moveCameraTo(camera, controls, position, target, 0.25);
+  applyInteriorPreviewLight(group, target);
+  moveCameraTo(camera, controls, position, target, 0.45, Math.max(length * 2.2, width * 4.2, 8));
+}
+
+function applyInteriorPreviewLight(group: THREE.Group, worldTarget: THREE.Vector3) {
+  removeCustomChildren(group, "__custom_interior_preview_light");
+
+  const metrics = getCarMetrics(group);
+  const scale = getUniformWorldScale(group);
+  const lightDistance = Math.max(metrics.size.x, metrics.size.y, metrics.size.z) * 0.75;
+  const localTarget = group.worldToLocal(worldTarget.clone());
+
+  const cabinPoint = new THREE.PointLight("#f5fbff", 95, lightDistance, 1.05);
+  cabinPoint.name = "__custom_interior_preview_light";
+  cabinPoint.userData.__customizationHelper = true;
+  cabinPoint.position.copy(localTarget);
+  cabinPoint.position.y += (metrics.size.y * 0.12) / scale;
+  group.add(cabinPoint);
+
+  const softFill = new THREE.SpotLight("#d9ecff", 70, lightDistance * 1.4, Math.PI / 3.2, 0.72, 1.1);
+  softFill.name = "__custom_interior_preview_light";
+  softFill.userData.__customizationHelper = true;
+  softFill.position.copy(localTarget);
+  softFill.position.y += (metrics.size.y * 0.55) / scale;
+  const target = new THREE.Object3D();
+  target.name = "__custom_interior_preview_light";
+  target.userData.__customizationHelper = true;
+  target.position.copy(localTarget);
+  group.add(softFill, target);
+  softFill.target = target;
 }
 
 function focusCameraOnDoors(

@@ -25,8 +25,8 @@ const pathMap: Record<string, string> = {
 
 const DRIFT_DURATION = 7.4;
 const CAMERA_SETTLE_DURATION = 2.4;
-const FINAL_REVEAL_TIME = DRIFT_DURATION + CAMERA_SETTLE_DURATION * 0.66;
-const DRIFT_RADIUS = 4.2;
+const FINAL_REVEAL_TIME = DRIFT_DURATION + CAMERA_SETTLE_DURATION;
+const DRIFT_RADIUS = 3.9;
 
 export default function DriveAwayShowcase({
   model,
@@ -53,8 +53,8 @@ export default function DriveAwayShowcase({
 
     const width = Math.max(host.clientWidth, 1);
     const height = Math.max(host.clientHeight, 1);
-    const camera = new THREE.PerspectiveCamera(35, width / height, 0.1, 220);
-    camera.position.set(0, 13.2, 0.12);
+    const camera = new THREE.PerspectiveCamera(28, width / height, 0.1, 220);
+    camera.position.set(0, 7.4, 0.12);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -78,9 +78,9 @@ export default function DriveAwayShowcase({
     key.shadow.mapSize.set(2048, 2048);
     scene.add(key);
 
-    const garageFill = new THREE.SpotLight("#ffb15a", 95, 26, Math.PI / 5.8, 0.62, 1.6);
-    garageFill.position.set(6, 5, -7);
-    scene.add(garageFill);
+    const sideFill = new THREE.DirectionalLight("#ffd39a", 2.1);
+    sideFill.position.set(5, 5, -6);
+    scene.add(sideFill);
 
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(28, 20),
@@ -118,7 +118,7 @@ export default function DriveAwayShowcase({
           }
 
           const modelScene = gltf.scene;
-          normalizeCarModel(modelScene, 8.4);
+          normalizeCarModel(modelScene, 12);
           applyDriveAwayColors(modelScene, exteriorColor, interiorColor, wheelColor, wheelStyle);
           modelScene.traverse((obj) => {
             if (obj instanceof THREE.Mesh) {
@@ -139,9 +139,9 @@ export default function DriveAwayShowcase({
 
     const clock = new THREE.Clock();
     const cameraTarget = new THREE.Vector3();
-    const finalTarget = new THREE.Vector3(0.2, 0.92, 0);
-    const finalCamera = new THREE.Vector3(-3.25, 1.22, 4.15);
-    const overheadCamera = new THREE.Vector3(0, 13.2, 0.18);
+    const finalTarget = new THREE.Vector3(0.15, 1.1, 0);
+    const finalCamera = new THREE.Vector3(-2.8, 1.05, 3.25);
+    const overheadCamera = new THREE.Vector3(0, 7.4, 0.1);
 
     const animate = () => {
       const t = clock.getElapsedTime();
@@ -232,15 +232,15 @@ export default function DriveAwayShowcase({
         <p className="mt-2 text-sm leading-6 text-slate-300">{handoffStatus}</p>
       </div>
       <div
-        className={`pointer-events-none absolute right-6 top-6 max-w-md rounded-3xl border border-white/15 bg-black/60 px-6 py-5 text-right shadow-[0_24px_90px_rgba(0,0,0,0.55)] backdrop-blur transition duration-700 ${
-          isComplete ? "translate-y-0 opacity-100" : "-translate-y-5 opacity-0"
+        className={`pointer-events-none absolute right-6 top-6 max-w-md rounded-3xl border border-white/15 bg-black/60 px-6 py-5 text-right shadow-[0_24px_90px_rgba(0,0,0,0.65)] backdrop-blur transition duration-700 ${
+          isComplete ? "translate-x-0 opacity-100" : "translate-x-8 opacity-0"
         }`}
       >
         <p className="text-xs uppercase tracking-[0.36em] text-[#8cc8ff]">BMW Dealership</p>
-        <h2 className="mt-2 text-3xl font-black uppercase tracking-[0.16em] text-white sm:text-4xl">
+        <h2 className="mt-3 text-3xl font-black uppercase tracking-[0.14em] text-white sm:text-4xl">
           Thanks for booking
         </h2>
-        <p className="mt-2 text-sm text-slate-300">Your configured BMW is ready for the next step.</p>
+        <p className="mt-3 text-sm text-slate-300">Your configured BMW is ready for the next step.</p>
       </div>
       <div className="pointer-events-none absolute bottom-6 right-6 rounded-full border border-[#68a7ff]/40 bg-[#0b2344]/80 px-5 py-2 text-sm uppercase tracking-[0.22em] text-[#d9ecff] shadow-xl backdrop-blur">
         Cinematic drift handoff

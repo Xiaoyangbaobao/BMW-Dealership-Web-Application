@@ -25,6 +25,15 @@ export default function CustomizationApp({ model }: Props) {
     setWheelFocusKey((key) => key + 1);
   };
 
+  const driveAwayHref =
+    `/drive-away/${model.id}?` +
+    new URLSearchParams({
+      exterior,
+      interior,
+      wheel: wheelColor,
+      wheelStyle,
+    }).toString();
+
   return (
     <div className="mx-auto flex min-h-[calc(100vh-96px)] w-full max-w-none px-4 py-4 lg:px-8">
       <div className="grid min-h-0 w-full grid-cols-1 items-stretch gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -59,6 +68,7 @@ export default function CustomizationApp({ model }: Props) {
             doorsOpen={doorsOpen}
             windowsDown={windowsDown}
             lightsOn={lightsOn}
+            driveAwayHref={driveAwayHref}
             onExteriorChange={(c: string) => setExterior(c)}
             onInteriorChange={(c: string) => setInterior(c)}
             onWheelColorChange={(c: string) => {

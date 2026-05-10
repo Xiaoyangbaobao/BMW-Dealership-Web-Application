@@ -26,7 +26,7 @@ const pathMap: Record<string, string> = {
 const DRIFT_DURATION = 7.4;
 const CAMERA_SETTLE_DURATION = 2.4;
 const FINAL_REVEAL_TIME = DRIFT_DURATION + CAMERA_SETTLE_DURATION;
-const DRIFT_RADIUS = 3.9;
+const DRIFT_RADIUS = 4.2;
 
 export default function DriveAwayShowcase({
   model,
@@ -53,8 +53,8 @@ export default function DriveAwayShowcase({
 
     const width = Math.max(host.clientWidth, 1);
     const height = Math.max(host.clientHeight, 1);
-    const camera = new THREE.PerspectiveCamera(28, width / height, 0.1, 220);
-    camera.position.set(0, 7.4, 0.12);
+    const camera = new THREE.PerspectiveCamera(32, width / height, 0.1, 220);
+    camera.position.set(0, 10.5, 0.12);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -97,8 +97,6 @@ export default function DriveAwayShowcase({
     addGarageDetails(scene);
     addParkingLines(scene);
     const tireMarks = createTireMarks(scene);
-    const smoke = createSmokePuffs(scene);
-
     const carRoot = new THREE.Group();
     scene.add(carRoot);
 
@@ -118,7 +116,7 @@ export default function DriveAwayShowcase({
           }
 
           const modelScene = gltf.scene;
-          normalizeCarModel(modelScene, 12);
+          normalizeCarModel(modelScene, 4.8);
           applyDriveAwayColors(modelScene, exteriorColor, interiorColor, wheelColor, wheelStyle);
           modelScene.traverse((obj) => {
             if (obj instanceof THREE.Mesh) {
@@ -140,8 +138,8 @@ export default function DriveAwayShowcase({
     const clock = new THREE.Clock();
     const cameraTarget = new THREE.Vector3();
     const finalTarget = new THREE.Vector3(0.15, 1.1, 0);
-    const finalCamera = new THREE.Vector3(-2.8, 1.05, 3.25);
-    const overheadCamera = new THREE.Vector3(0, 7.4, 0.1);
+    const finalCamera = new THREE.Vector3(-2.3, 0.95, 2.85);
+    const overheadCamera = new THREE.Vector3(0, 10.5, 0.1);
 
     const animate = () => {
       const t = clock.getElapsedTime();
@@ -166,21 +164,6 @@ export default function DriveAwayShowcase({
       if (loadedCar) {
         loadedCar.rotation.x = Math.sin(t * 4.2) * 0.012 * (1 - transitionProgress);
       }
-
-      const smokeIntensity = 1 - transitionProgress;
-      smoke.forEach((puff, index) => {
-        const phase = (puff.userData.phase + t * 0.2) % 1;
-        const trailAngle = orbit - phase * 1.65 - index * 0.025;
-        puff.position.set(
-          Math.cos(trailAngle) * (DRIFT_RADIUS + phase * 1.15),
-          0.14 + phase * 1.25,
-          Math.sin(trailAngle) * (DRIFT_RADIUS * 0.78 + phase * 0.95),
-        );
-        const scale = (1.4 + phase * 4.6) * smokeIntensity;
-        puff.scale.setScalar(Math.max(scale, 0.001));
-        const material = puff.material as THREE.MeshBasicMaterial;
-        material.opacity = Math.max(0, 0.34 * (1 - phase) * smokeIntensity);
-      });
 
       tireMarks.forEach((mark, index) => {
         const material = mark.material as THREE.MeshBasicMaterial;
@@ -315,30 +298,13 @@ function createTireMarks(scene: THREE.Scene) {
   });
 }
 
-function createSmokePuffs(scene: THREE.Scene) {
-  return Array.from({ length: 36 }, (_, index) => {
-    const puff = new THREE.Mesh(
-      new THREE.SphereGeometry(0.38 + (index % 5) * 0.07, 20, 14),
-      new THREE.MeshBasicMaterial({
-        color: "#cfd6dc",
-        transparent: true,
-        opacity: 0.24,
-        depthWrite: false,
-      }),
-    );
-    puff.userData.phase = index / 36;
-    scene.add(puff);
-    return puff;
-  });
-}
-
 function normalizeCarModel(object: THREE.Object3D, targetSize: number) {
   object.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(object);
   const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
-  const maxAxis = Math.max(size.x, size.y, size.z, 1);
-  const scale = targetSize / maxAxis;
+  const maxAxis = Math.max(size.x, size.y, size.z);
+  const scale = targetSize / (maxAxis || 1);
 
   object.scale.setScalar(scale);
   object.position.set(-center.x * scale, -center.y * scale, -center.z * scale);

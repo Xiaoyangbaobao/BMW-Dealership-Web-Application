@@ -1,0 +1,363 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import type { CarModel } from "@/data/models";
+import type { WheelStyle } from "./CustomizationApp";
+
+type DriveAwayShowcaseProps = {
+  model: CarModel;
+  exteriorColor?: string;
+  interiorColor?: string;
+  wheelColor?: string;
+  wheelStyle?: WheelStyle;
+};
+
+const pathMap: Record<string, string> = {
+  "bmw-m3-cs-touring": "/models/2025_bmw_m3_cs_touring.glb",
+  "bmw-m4-competition": "/models/2025_bmw_m4_competition.glb",
+  "bmw-m4-f82": "/models/bmw_m4_f82.glb",
+  "bmw-m3-topaz": "/models/bmw_m3_sedan_topaz_blue_car.glb",
+  "bmw-x3": "/models/bmw_x3_m40i.glb",
+  "bmw-z8": "/models/bmw_z8__www.vecarz.com.glb",
+};
+
+const DRIFT_DURATION = 7.4;
+const CAMERA_SETTLE_DURATION = 2.4;
+const FINAL_REVEAL_TIME = DRIFT_DURATION + CAMERA_SETTLE_DURATION;
+const DRIFT_RADIUS = 3.15;
+const DRIFT_LAPS = 3;
+const MODEL_TARGET_SIZE = 5.8;
+
+export default function DriveAwayShowcase({
+  model,
+  exteriorColor = "#1f2937",
+  interiorColor = "#0b1220",
+  wheelColor = "#cfd6df",
+  wheelStyle = "classic",
+}: DriveAwayShowcaseProps) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const resolvedPath = model.modelPath ?? pathMap[model.id] ?? "";
+  const [isComplete, setIsComplete] = useState(false);
+  const [loadStatus, setLoadStatus] = useState("Loading your customized BMW for the drift handoff...");
+  const handoffStatus = isComplete ? "Thanks for booking. Your BMW is staged and ready." : loadStatus;
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+
+    setIsComplete(false);
+    setLoadStatus(resolvedPath ? "Loading your customized BMW for the drift handoff..." : "No 3D model is available for this handoff.");
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color("#050608");
+    scene.fog = new THREE.Fog("#050608", 12, 34);
+
+    const width = Math.max(host.clientWidth, 1);
+    const height = Math.max(host.clientHeight, 1);
+    const camera = new THREE.PerspectiveCamera(30, width / height, 0.1, 220);
+    camera.position.set(0, 8.8, 0.1);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(width, height, false);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.14;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.domElement.style.display = "block";
+    renderer.domElement.style.height = "100%";
+    renderer.domElement.style.width = "100%";
+    host.appendChild(renderer.domElement);
+
+    const hemi = new THREE.HemisphereLight("#d6e2f0", "#17120e", 1.55);
+    scene.add(hemi);
+
+    const key = new THREE.DirectionalLight("#fff7e8", 4.4);
+    key.position.set(-5, 10, 7);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    scene.add(key);
+
+    const sideFill = new THREE.DirectionalLight("#ffd39a", 1.8);
+    sideFill.position.set(5, 5, -6);
+    scene.add(sideFill);
+
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(22, 16),
+      new THREE.MeshStandardMaterial({
+        color: "#2a2824",
+        metalness: 0.08,
+        roughness: 0.72,
+      }),
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    addParkingLines(scene);
+    const tireMarks = createTireMarks(scene);
+
+    const carRoot = new THREE.Group();
+    scene.add(carRoot);
+
+    let animationId = 0;
+    let completionAnnounced = false;
+    let disposed = false;
+    let loadedCar: THREE.Group | null = null;
+    const clock = new THREE.Clock();
+    const loader = new GLTFLoader();
+    const cameraTarget = new THREE.Vector3();
+    const finalTarget = new THREE.Vector3(0.05, 0.82, 0);
+    const finalCamera = new THREE.Vector3(-3.2, 1.35, 4.45);
+    const overheadCamera = new THREE.Vector3(0, 8.8, 0.1);
+
+    if (resolvedPath) {
+      loader.load(
+        resolvedPath,
+        (gltf) => {
+          if (disposed) {
+            disposeObject3D(gltf.scene);
+            return;
+          }
+
+          const modelScene = gltf.scene;
+          normalizeCarModel(modelScene, MODEL_TARGET_SIZE);
+          applyDriveAwayColors(modelScene, exteriorColor, interiorColor, wheelColor, wheelStyle);
+          modelScene.traverse((obj) => {
+            if (obj instanceof THREE.Mesh) {
+              obj.castShadow = true;
+              obj.receiveShadow = true;
+            }
+          });
+          carRoot.add(modelScene);
+          loadedCar = modelScene;
+          setLoadStatus("Your customized BMW is ready to drift into the handoff bay.");
+        },
+        undefined,
+        () => {
+          if (!disposed) setLoadStatus("Unable to load this BMW handoff animation.");
+        },
+      );
+    }
+
+    const animate = () => {
+      const t = clock.getElapsedTime();
+      const driftProgress = Math.min(t / DRIFT_DURATION, 1);
+      const transitionProgress = smoothstep(
+        THREE.MathUtils.clamp((t - DRIFT_DURATION) / CAMERA_SETTLE_DURATION, 0, 1),
+      );
+      const orbit = -Math.PI / 2 + driftProgress * Math.PI * 2 * DRIFT_LAPS;
+      const driftX = Math.cos(orbit) * DRIFT_RADIUS;
+      const driftZ = Math.sin(orbit) * DRIFT_RADIUS;
+      const x = THREE.MathUtils.lerp(driftX, 0, transitionProgress);
+      const z = THREE.MathUtils.lerp(driftZ, 0, transitionProgress);
+      const driftHeading = -orbit + Math.PI / 2 + 0.72 + Math.sin(t * 3.2) * 0.12;
+      const finalHeading = Math.PI * 0.74;
+
+      carRoot.position.set(x, 0, z);
+      carRoot.rotation.y = lerpAngle(driftHeading, finalHeading, transitionProgress);
+      carRoot.rotation.z = Math.sin(t * 3.5) * 0.035 * (1 - transitionProgress);
+
+      if (loadedCar) {
+        loadedCar.rotation.x = Math.sin(t * 4.2) * 0.01 * (1 - transitionProgress);
+      }
+
+      tireMarks.forEach((mark, index) => {
+        const material = mark.material as THREE.MeshBasicMaterial;
+        material.opacity = 0.1 + Math.min(driftProgress * 1.5, 1) * (index === 0 ? 0.5 : 0.3);
+      });
+
+      const dynamicOverhead = overheadCamera.clone().add(new THREE.Vector3(x * 0.08, 0, z * 0.08));
+      camera.position.copy(dynamicOverhead.lerp(finalCamera, transitionProgress));
+      cameraTarget.copy(new THREE.Vector3(x, 0.34, z).lerp(finalTarget, transitionProgress));
+      camera.lookAt(cameraTarget);
+
+      if (!completionAnnounced && t >= FINAL_REVEAL_TIME) {
+        completionAnnounced = true;
+        setIsComplete(true);
+      }
+
+      renderer.render(scene, camera);
+      animationId = requestAnimationFrame(animate);
+    };
+
+    const resize = () => {
+      const nextWidth = Math.max(host.clientWidth, 1);
+      const nextHeight = Math.max(host.clientHeight, 1);
+      renderer.setSize(nextWidth, nextHeight, false);
+      camera.aspect = nextWidth / nextHeight;
+      camera.updateProjectionMatrix();
+    };
+
+    window.addEventListener("resize", resize);
+    animate();
+
+    return () => {
+      disposed = true;
+      cancelAnimationFrame(animationId);
+      window.removeEventListener("resize", resize);
+      if (host.contains(renderer.domElement)) host.removeChild(renderer.domElement);
+      disposeObject3D(scene);
+      renderer.dispose();
+    };
+  }, [model, resolvedPath, exteriorColor, interiorColor, wheelColor, wheelStyle]);
+
+  return (
+    <div className="relative min-h-[calc(100vh-96px)] overflow-hidden rounded-2xl border border-white/10 bg-[#050608]">
+      <div ref={hostRef} className="h-[calc(100vh-96px)] min-h-[680px] w-full" />
+      <div className="pointer-events-none absolute left-6 top-6 max-w-xl rounded-2xl border border-white/10 bg-black/55 p-5 shadow-2xl backdrop-blur">
+        <p className="m-0 text-xs uppercase tracking-[0.28em] text-[#68a7ff]">Drive Away</p>
+        <h1 className="mt-2 text-4xl font-bold text-white">{model.name}</h1>
+        <p className="mt-2 text-sm leading-6 text-slate-300">{handoffStatus}</p>
+      </div>
+      <div
+        className={`pointer-events-none absolute right-6 top-6 max-w-md rounded-3xl border border-white/15 bg-black/60 px-6 py-5 text-right shadow-[0_24px_90px_rgba(0,0,0,0.65)] backdrop-blur transition duration-700 ${
+          isComplete ? "translate-x-0 opacity-100" : "translate-x-8 opacity-0"
+        }`}
+      >
+        <p className="text-xs uppercase tracking-[0.36em] text-[#8cc8ff]">BMW Dealership</p>
+        <h2 className="mt-3 text-3xl font-black uppercase tracking-[0.14em] text-white sm:text-4xl">
+          Thanks for booking
+        </h2>
+        <p className="mt-3 text-sm text-slate-300">Your configured BMW is ready for the next step.</p>
+      </div>
+      <div className="pointer-events-none absolute bottom-6 right-6 rounded-full border border-[#68a7ff]/40 bg-[#0b2344]/80 px-5 py-2 text-sm uppercase tracking-[0.22em] text-[#d9ecff] shadow-xl backdrop-blur">
+        Cinematic drift handoff
+      </div>
+    </div>
+  );
+}
+
+function addParkingLines(scene: THREE.Scene) {
+  const lineMaterial = new THREE.MeshBasicMaterial({ color: "#d0a44a", transparent: true, opacity: 0.42 });
+  [-5.8, 5.8].forEach((x) => {
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(0.08, 14), lineMaterial);
+    line.rotation.x = -Math.PI / 2;
+    line.position.set(x, 0.012, 0);
+    scene.add(line);
+  });
+}
+
+function createTireMarks(scene: THREE.Scene) {
+  return [
+    { radius: DRIFT_RADIUS, thickness: 0.065, opacity: 0.58 },
+    { radius: DRIFT_RADIUS - 0.4, thickness: 0.05, opacity: 0.36 },
+  ].map(({ radius, thickness, opacity }) => {
+    const mark = new THREE.Mesh(
+      new THREE.TorusGeometry(radius, thickness, 10, 220),
+      new THREE.MeshBasicMaterial({ color: "#090908", transparent: true, opacity }),
+    );
+    mark.rotation.x = Math.PI / 2;
+    mark.position.y = 0.026;
+    scene.add(mark);
+    return mark;
+  });
+}
+
+function normalizeCarModel(object: THREE.Object3D, targetSize: number) {
+  object.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(object);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const maxAxis = Math.max(size.x, size.y, size.z, 1);
+  const scale = targetSize / maxAxis;
+
+  object.scale.setScalar(scale);
+  object.position.set(-center.x * scale, -center.y * scale, -center.z * scale);
+  object.updateMatrixWorld(true);
+
+  const normalizedBox = new THREE.Box3().setFromObject(object);
+  object.position.y += -normalizedBox.min.y;
+  object.rotation.y = Math.PI / 2;
+}
+
+function applyDriveAwayColors(
+  root: THREE.Object3D,
+  exteriorColor: string,
+  interiorColor: string,
+  wheelColor: string,
+  wheelStyle: WheelStyle,
+) {
+  root.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh)) return;
+
+    const meshName = `${obj.name || ""} ${getMaterialNames(obj)}`.toLowerCase();
+    getMaterials(obj).forEach((material) => {
+      const mat = material as any;
+      if (!mat.color) return;
+
+      if (isWheelLike(meshName)) {
+        if (meshName.includes("tire") || meshName.includes("tyre")) {
+          mat.color.set("#050609");
+        } else {
+          mat.color.set(wheelColor);
+          mat.metalness = wheelStyle === "sport" ? 0.95 : 0.82;
+          mat.roughness = wheelStyle === "aero" ? 0.18 : 0.32;
+        }
+      } else if (isInteriorLike(meshName)) {
+        mat.color.set(interiorColor);
+      } else if (isExteriorLike(meshName, mat)) {
+        mat.color.set(exteriorColor);
+      }
+
+      mat.needsUpdate = true;
+    });
+  });
+}
+
+function smoothstep(value: number) {
+  return value * value * (3 - 2 * value);
+}
+
+function lerpAngle(start: number, end: number, alpha: number) {
+  const delta = Math.atan2(Math.sin(end - start), Math.cos(end - start));
+  return start + delta * alpha;
+}
+
+function getMaterials(mesh: THREE.Mesh) {
+  return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+}
+
+function getMaterialNames(mesh: THREE.Mesh) {
+  return getMaterials(mesh)
+    .map((material) => (material as any)?.name || "")
+    .join(" ");
+}
+
+function isWheelLike(name: string) {
+  return name.includes("wheel") || name.includes("rim") || name.includes("tire") || name.includes("tyre");
+}
+
+function isInteriorLike(name: string) {
+  return name.includes("interior") || name.includes("seat") || name.includes("leather") || name.includes("dashboard");
+}
+
+function isExteriorLike(name: string, material: any) {
+  return (
+    name.includes("paint") ||
+    name.includes("body") ||
+    name.includes("exterior") ||
+    name.includes("bodywork") ||
+    (material.metalness !== undefined && material.metalness > 0.2)
+  );
+}
+
+function disposeObject3D(object: THREE.Object3D) {
+  object.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+
+    child.geometry?.dispose();
+    getMaterials(child).forEach((material) => {
+      if (!material) return;
+      const mat = material as any;
+      Object.keys(mat).forEach((key) => {
+        const value = mat[key];
+        if (value?.isTexture) value.dispose();
+      });
+      material.dispose();
+    });
+  });
+}

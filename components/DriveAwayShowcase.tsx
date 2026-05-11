@@ -14,6 +14,13 @@ type DriveAwayShowcaseProps = {
   wheelStyle?: WheelStyle;
 };
 
+const DRIFT_DURATION = 7.4;
+const CAMERA_SETTLE_DURATION = 2.4;
+const FINAL_REVEAL_TIME = DRIFT_DURATION + CAMERA_SETTLE_DURATION;
+const DRIFT_RADIUS = 2.8;
+const DRIFT_LAPS = 3;
+const MODEL_TARGET_SIZE = 4.8;
+
 const pathMap: Record<string, string> = {
   "bmw-m3-cs-touring": "/models/2025_bmw_m3_cs_touring.glb",
   "bmw-m4-competition": "/models/2025_bmw_m4_competition.glb",
@@ -22,13 +29,6 @@ const pathMap: Record<string, string> = {
   "bmw-x3": "/models/bmw_x3_m40i.glb",
   "bmw-z8": "/models/bmw_z8__www.vecarz.com.glb",
 };
-
-const DRIFT_DURATION = 7.4;
-const CAMERA_SETTLE_DURATION = 2.4;
-const FINAL_REVEAL_TIME = DRIFT_DURATION + CAMERA_SETTLE_DURATION;
-const DRIFT_RADIUS = 3.15;
-const DRIFT_LAPS = 3;
-const MODEL_TARGET_SIZE = 5.8;
 
 export default function DriveAwayShowcase({
   model,
@@ -39,32 +39,35 @@ export default function DriveAwayShowcase({
 }: DriveAwayShowcaseProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const resolvedPath = model.modelPath ?? pathMap[model.id] ?? "";
+  const [status, setStatus] = useState("Preparing your BMW drift handoff...");
   const [isComplete, setIsComplete] = useState(false);
-  const [loadStatus, setLoadStatus] = useState("Loading your customized BMW for the drift handoff...");
-  const handoffStatus = isComplete ? "Thanks for booking. Your BMW is staged and ready." : loadStatus;
+  const handoffStatus = !resolvedPath
+    ? "No 3D model is available for this handoff."
+    : isComplete
+      ? "Thanks for booking. Your BMW is staged and ready."
+      : status;
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
     setIsComplete(false);
-    setLoadStatus(resolvedPath ? "Loading your customized BMW for the drift handoff..." : "No 3D model is available for this handoff.");
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color("#050608");
-    scene.fog = new THREE.Fog("#050608", 12, 34);
+    scene.fog = new THREE.Fog("#050608", 12, 36);
 
     const width = Math.max(host.clientWidth, 1);
     const height = Math.max(host.clientHeight, 1);
     const camera = new THREE.PerspectiveCamera(30, width / height, 0.1, 220);
-    camera.position.set(0, 8.8, 0.1);
+    camera.position.set(0, 8.6, 0.1);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(width, height, false);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.14;
+    renderer.toneMappingExposure = 1.12;
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.domElement.style.display = "block";
@@ -72,16 +75,16 @@ export default function DriveAwayShowcase({
     renderer.domElement.style.width = "100%";
     host.appendChild(renderer.domElement);
 
-    const hemi = new THREE.HemisphereLight("#d6e2f0", "#17120e", 1.55);
+    const hemi = new THREE.HemisphereLight("#c8d6e8", "#15100d", 1.35);
     scene.add(hemi);
 
-    const key = new THREE.DirectionalLight("#fff7e8", 4.4);
+    const key = new THREE.DirectionalLight("#fff7e8", 4.1);
     key.position.set(-5, 10, 7);
     key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
     scene.add(key);
 
-    const sideFill = new THREE.DirectionalLight("#ffd39a", 1.8);
+    const sideFill = new THREE.DirectionalLight("#ffd39a", 1.7);
     sideFill.position.set(5, 5, -6);
     scene.add(sideFill);
 
@@ -103,16 +106,10 @@ export default function DriveAwayShowcase({
     const carRoot = new THREE.Group();
     scene.add(carRoot);
 
+    let disposed = false;
     let animationId = 0;
     let completionAnnounced = false;
-    let disposed = false;
-    let loadedCar: THREE.Group | null = null;
-    const clock = new THREE.Clock();
     const loader = new GLTFLoader();
-    const cameraTarget = new THREE.Vector3();
-    const finalTarget = new THREE.Vector3(0.05, 0.82, 0);
-    const finalCamera = new THREE.Vector3(-3.2, 1.35, 4.45);
-    const overheadCamera = new THREE.Vector3(0, 8.8, 0.1);
 
     if (resolvedPath) {
       loader.load(
@@ -133,15 +130,20 @@ export default function DriveAwayShowcase({
             }
           });
           carRoot.add(modelScene);
-          loadedCar = modelScene;
-          setLoadStatus("Your customized BMW is ready to drift into the handoff bay.");
+          setStatus("Your customized BMW is ready to drift into the handoff bay.");
         },
         undefined,
         () => {
-          if (!disposed) setLoadStatus("Unable to load this BMW handoff animation.");
+          if (!disposed) setStatus("Unable to load this BMW handoff animation.");
         },
       );
     }
+
+    const clock = new THREE.Clock();
+    const cameraTarget = new THREE.Vector3();
+    const finalTarget = new THREE.Vector3(0.05, 0.75, 0);
+    const finalCamera = new THREE.Vector3(-3.05, 1.28, 4.15);
+    const overheadCamera = new THREE.Vector3(0, 8.6, 0.1);
 
     const animate = () => {
       const t = clock.getElapsedTime();
@@ -161,10 +163,6 @@ export default function DriveAwayShowcase({
       carRoot.rotation.y = lerpAngle(driftHeading, finalHeading, transitionProgress);
       carRoot.rotation.z = Math.sin(t * 3.5) * 0.035 * (1 - transitionProgress);
 
-      if (loadedCar) {
-        loadedCar.rotation.x = Math.sin(t * 4.2) * 0.01 * (1 - transitionProgress);
-      }
-
       tireMarks.forEach((mark, index) => {
         const material = mark.material as THREE.MeshBasicMaterial;
         material.opacity = 0.1 + Math.min(driftProgress * 1.5, 1) * (index === 0 ? 0.5 : 0.3);
@@ -172,7 +170,7 @@ export default function DriveAwayShowcase({
 
       const dynamicOverhead = overheadCamera.clone().add(new THREE.Vector3(x * 0.08, 0, z * 0.08));
       camera.position.copy(dynamicOverhead.lerp(finalCamera, transitionProgress));
-      cameraTarget.copy(new THREE.Vector3(x, 0.34, z).lerp(finalTarget, transitionProgress));
+      cameraTarget.copy(new THREE.Vector3(x, 0.32, z).lerp(finalTarget, transitionProgress));
       camera.lookAt(cameraTarget);
 
       if (!completionAnnounced && t >= FINAL_REVEAL_TIME) {
@@ -308,19 +306,6 @@ function applyDriveAwayColors(
   });
 }
 
-function smoothstep(value: number) {
-  return value * value * (3 - 2 * value);
-}
-
-function lerpAngle(start: number, end: number, alpha: number) {
-  const delta = Math.atan2(Math.sin(end - start), Math.cos(end - start));
-  return start + delta * alpha;
-}
-
-function getMaterials(mesh: THREE.Mesh) {
-  return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-}
-
 function getMaterialNames(mesh: THREE.Mesh) {
   return getMaterials(mesh)
     .map((material) => (material as any)?.name || "")
@@ -343,6 +328,19 @@ function isExteriorLike(name: string, material: any) {
     name.includes("bodywork") ||
     (material.metalness !== undefined && material.metalness > 0.2)
   );
+}
+
+function smoothstep(value: number) {
+  return value * value * (3 - 2 * value);
+}
+
+function lerpAngle(start: number, end: number, alpha: number) {
+  const delta = Math.atan2(Math.sin(end - start), Math.cos(end - start));
+  return start + delta * alpha;
+}
+
+function getMaterials(mesh: THREE.Mesh) {
+  return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
 }
 
 function disposeObject3D(object: THREE.Object3D) {
